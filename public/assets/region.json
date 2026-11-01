@@ -1,0 +1,23 @@
+{
+  "name": "Uetliberg \u00b7 Z\u00fcrich",
+  "crs": "EPSG:2056 / LN02",
+  "bounds": [
+    2678500,
+    1243800,
+    2681000,
+    1246600
+  ],
+  "origin": [
+    2679500,
+    1245000
+  ],
+  "heightOrigin": 400,
+  "width": 626,
+  "height": 701,
+  "step": 4,
+  "minAltitude": 424.9833984375,
+  "maxAltitude": 871.8986206054688,
+  "source": "\u00a9swisstopo",
+  "sourceSnapshot": "2026-11-01",
+  "trailNotice": "Spielerisch gestaltete Strecke auf realem Gel\u00e4nde; keine reale Trail-Navigation."
+}
