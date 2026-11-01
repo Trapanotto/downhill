@@ -16,5 +16,5 @@ await cache.put(root+'assets/lenzerheide/region.json',new Response('alpine-regio
 assert.equal(await load('assets/lenzerheide/region.json?v='+version),'alpine-region');
 assert.equal(await load('?region=lenzerheide&line=technical','navigate'),'offline-game-shell');
 const packaged=JSON.parse(fs.readFileSync('dist/offline-files.json'));
-for(const file of ['assets/region.json','assets/lenzerheide/region.json','assets/lenzerheide/trail.json','assets/lenzerheide/trail-technical.json','assets/lenzerheide/panorama.glb'])assert.ok(packaged.includes(file),'Missing offline region asset: '+file);
+for(const file of ['assets/region.json','assets/lenzerheide/region.json','assets/lenzerheide/trail.json','assets/lenzerheide/trail-technical.json','assets/lenzerheide/panorama.glb','assets/bike-v3.glb','assets/rider-v3.glb','assets/surface-details.bin','assets/corridor-v3-mobile.glb','assets/lenzerheide/surface-details.bin','assets/lenzerheide/corridor-v3-high.glb','assets/lenzerheide/tree-v3-high.glb'])assert.ok(packaged.includes(file),'Missing offline region asset: '+file);
 console.log('Both regions, technical line and query-string offline navigation passed.');

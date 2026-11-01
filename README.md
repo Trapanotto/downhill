@@ -10,8 +10,8 @@ A playable Three.js downhill biking game on **real Swiss terrain at Uetliberg an
 - Lenzerheide also includes **Roots Line**, a shorter technical alternative (1.84 km), with its own checkpoints, times and ghost.
 - 7 km² at Uetliberg; 5.29 km² playable Lenzerheide terrain plus a prebuilt surrounding mountain panorama. Only the selected region is loaded before riding.
 - Time trial with ordered checkpoints, medals, a saved personal best and a local ghost; free ride mode.
-- 120 Hz bicycle handling with filtered steering, progressive brakes, rear-wheel slip, rider weight shift, charged bunnyhops, damped suspension, classified landings, trunk collisions and checkpoint respawn.
-- Animated full-suspension bike and rider; 4,200 broadleaf trees with photographic branch cards nearby and prebaked tree views in the distance. PBR ground, 572 rocks, 382 ferns, 2,288 grass clumps, 34 roots, shadows and dust.
+- 120 Hz bicycle handling with filtered steering, progressive brakes, rear-wheel slip, rider weight shift, charged bunnyhops, damped suspension, classified landings, swept collisions against trunks, rocks, buildings and checkpoint poles and checkpoint respawn.
+- A weighted, 16-bone rider uses two-bone arm/leg IK, steered grips and animated cranks/pedals. Animated full-suspension bike; 4,200 broadleaf trees with photographic branch cards nearby and prebaked tree views in the distance. PBR ground, 476 rocks, 382 ferns, 2,288 grass clumps, 34 roots, shadows and dust.
 - Desktop / balanced / mobile graphics, automatic render-resolution adjustment and smartphone touch controls.
 - Optional procedural riding audio. All game libraries and art ship with the build. No analytics, accounts or external runtime services.
 
@@ -27,7 +27,30 @@ A playable Three.js downhill biking game on **real Swiss terrain at Uetliberg an
 | Respawn | R | Crash dialog; +3 seconds in a time trial |
 | Camera / pause / sound | C / P or Escape / M | On-screen buttons |
 
-Landscape orientation is recommended on a phone; portrait is supported. Actual speed and graphical fidelity depend on device/browser capabilities. There is no multiplayer server. Regions and lines have independent local best times and ghosts. Existing Uetliberg V2 records are retained. Selection is shareable through `?region=uetliberg`, `?region=lenzerheide` and `?region=lenzerheide&line=technical`.
+Landscape orientation is recommended on a phone; portrait is supported. Actual speed and graphical fidelity depend on device/browser capabilities. There is no multiplayer server. Regions and lines have independent local best times and ghosts. V3 starts separate best-time, ghost and checkpoint-split records for every route; older records remain in browser storage. Selection is shareable through `?region=uetliberg`, `?region=lenzerheide` and `?region=lenzerheide&line=technical`.
+
+## V3 ride and detail update
+
+- Braking transfers load, rear braking can lose grip, and cornering shares available tyre traction with braking. Landing impact uses slope and rider absorption.
+- Continuous collision sweeps prevent passing through small rocks/poles between physics frames. Camera collision uses the same obstacle index and terrain clearance, with curve anticipation and landing damping.
+- Screen-dither transitions blend nearby tree geometry with the baked distant views over 12 m. Refined canopy cards retain the original photographic branch maps.
+- A 3D checkpoint beacon and heading arrow guide the next gate. Checkpoint splits compare against the best run; a live ghost gap compares time at equal route progress. Ghosts interpolate angles, rider pedal phase and suspension.
+- Minimap bounds are calculated for each route, including both Lenzerheide lines.
+
+`Rider.blend` contains the editable weighted rider and separate bike assemblies. Both region `.blend` files include this rider plus their full terrain and authored detailed corridors. The original 2 m survey raster remains unchanged; `surface-details.json/.bin` stores fictional trail earthworks in sparse 32 m tiles.
+
+To rebuild V3 over the frozen V2.1 sources (the first command restores those source scenes from commit `9dea61d5973c7915761d5a44beb47c54bcb3a88d` into the ignored sibling cache; retain full Git history):
+
+```sh
+.venv/bin/python scripts/prepare_v3_surfaces.py
+blender --background --python-exit-code 1 --python scripts/build_rider_v3.py
+blender --background --python-exit-code 1 --python scripts/build_v3_worlds.py
+.venv/bin/python scripts/compress_blends.py
+node scripts/optimize_models.mjs public/assets v3
+node scripts/optimize_models.mjs public/assets/lenzerheide v3
+```
+
+The earlier scripts below reproduce the original region preparation. The V3 scripts consume only local frozen data; they do not download geodata. Validation includes 24 tests (including the shipped skinned GLB, swept obstacles, replay, minimaps and camera), plus complete automated controller runs on all three routes with all obstacle types active. Browser QA does not replace performance testing on physical phones.
 
 ## Local development
 
@@ -50,7 +73,7 @@ Vite's base is `/downhill/`, matching the repository's GitHub Pages URL. `.githu
 `Uetliberg.blend` is the editable, self-contained Blender source: terrain, designed trail, linked tree instances, bike, rider and a simplified summit landmark. The terrain's horizontal origin is **LV95 E 2,679,500 / N 1,245,000**; vertical origin **400 m LN02**. One game unit is one metre. In Three.js, +X is east, +Y is elevation, +Z is south.
 
 - Extent: E 2,678,500–2,681,000; N 1,243,800–1,246,600 (2.5 × 2.8 km).
-- Source terrain: **swissALTI3D 2026**, 2 m GeoTIFF, downloaded once. Physics sampling: 2 m. Base meshes: 4 m desktop / 8 m mobile. A 1 m inset corridor mesh is interpolated from that 2 m source, not additional measured detail. The fictional trail is graded locally with earthworks capped at ±1.6 m. Dataset resolution is not equivalent to vertical accuracy.
+- Source terrain: **swissALTI3D 2026**, 2 m GeoTIFF, downloaded once. Physics sampling: 2 m. Base meshes: 4 m desktop / 8 m mobile. A 0.5 m desktop / 1 m mobile inset corridor and shared 0.5 m sparse collision deltas add authored ruts, berms and four takeoffs; these are not additional measured detail. The fictional trail is graded locally with earthworks capped at ±1.6 m. Dataset resolution is not equivalent to vertical accuracy.
 - Aerial source: **SWISSIMAGE 2025**, 10 cm GeoTIFF tiles, locally mosaicked and resampled to a 4096 px desktop / 2048 px mobile texture.
 - Source dates, download URLs, SHA-256 hashes and sizes: [`public/assets/sources.json`](public/assets/sources.json).
 - `.blend` includes the prepared terrain and aerial texture; no Blender addon is needed.
@@ -82,8 +105,8 @@ The preparation script downloads source tiles to a sibling `geodata/` cache. The
 - Playable extent: **E 2,761,400–2,763,700 / N 1,178,200–1,180,500**. Local origin: **E 2,762,500 / N 1,179,200**, vertical origin **1,400 m LN02**.
 - Surrounding mountain extent: E 2,760,000–2,766,000 / N 1,176,000–1,182,000; geometry resampled offline at 32 m and textured with a fixed 2048 px aerial mosaic.
 - Frozen sources: **swissALTI3D 2023, 2 m**, and **SWISSIMAGE 2025, 10 cm**. Thirty-six elevation tiles and thirty-six aerial tiles are documented with URLs, byte sizes and SHA-256 hashes in `public/assets/lenzerheide/sources.json`.
-- Collision heightfield: 2 m; near terrain meshes: 4 m desktop / 8 m mobile. The 1 m route corridor is interpolated from the 2 m source. Both routes are locally graded; berms and five small rounded rollers are authored additions.
-- 2,700 conifers, 3,464 grass clumps, 578 stones, 72 ferns and 38 technical-route roots are stored as fixed placements. Tree geometry derives from the smaller C variation of Poly Haven's CC0 `fir_tree_01`, reduced and baked in Blender. Meadow maps derive from CC0 `leafy_grass`. Source records: `public/assets/lenzerheide/art-sources.json`; shared art retains the root art manifest.
+- Collision heightfield: 2 m; near terrain meshes: 4 m desktop / 8 m mobile. The V3 corridor is 0.5 m desktop / 1 m mobile, with the same 0.5 m authored height deltas used for contact. Both routes are locally graded; eight additional rounded takeoffs, ruts and raised outer curve edges are authored additions.
+- 2,700 conifers, 3,464 grass clumps, 487 stones, 72 ferns and 38 technical-route roots are stored as fixed placements. Tree geometry derives from the smaller C variation of Poly Haven's CC0 `fir_tree_01`, reduced and baked in Blender. Meadow maps derive from CC0 `leafy_grass`. Source records: `public/assets/lenzerheide/art-sources.json`; shared art retains the root art manifest.
 
 Rebuild the second region after preparing the existing Uetliberg source and shared art:
 
@@ -101,7 +124,7 @@ The source downloader replays the tracked frozen manifest and checks hashes by d
 
 ## Offline
 
-Options → **Spiel offline speichern** caches the complete published game package on that device. Open the game online once and wait for the explicit confirmation. Storage availability and eviction are controlled by the browser. The service worker is generated at build time; it never fetches new terrain while riding. A newly deployed version requires connectivity to update the shell and models. Asset URLs carry the package version to avoid mixing old heightfields/models with a new game shell. V2 best times and ghosts use separate local storage keys because its riding surface and handling changed.
+Options → **Spiel offline speichern** caches the complete published game package on that device. Open the game online once and wait for the explicit confirmation. Storage availability and eviction are controlled by the browser. The service worker is generated at build time; it never fetches new terrain while riding. A newly deployed version requires connectivity to update the shell and models. Asset URLs carry the package version to avoid mixing old heightfields/models with a new game shell. V3 best times, ghosts and checkpoint splits use separate local storage keys because the riding surface and handling changed.
 
 ## Attribution and rights
 

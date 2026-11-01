@@ -47,5 +47,7 @@
       -371.6938888888889,
       378.0827777777778
     ]
-  ]
+  ],
+  "detailVersion": 3,
+  "detailNote": "Authored ruts, banked corners and rounded takeoffs; sparse 0.5 m delta grid. Survey resolution stays 2 m."
 }

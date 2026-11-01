@@ -22,5 +22,7 @@
   "trailNotice": "Spielerisch gestaltete Strecke auf realem Gel\u00e4nde; keine reale Trail-Navigation.",
   "surfaceVersion": 2,
   "sourceResolution": 2,
-  "terrainNote": "2 m source; graded fictional trail corridor, limited to 1.6 m earthworks."
+  "terrainNote": "2 m source; graded fictional trail corridor, limited to 1.6 m earthworks.",
+  "detailVersion": 3,
+  "detailNote": "Authored ruts, banked corners and rounded takeoffs; sparse 0.5 m delta grid. Survey resolution stays 2 m."
 }

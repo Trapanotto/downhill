@@ -3,7 +3,7 @@ export const REGIONS=Object.freeze({
  uetliberg:{id:'uetliberg',number:'01',label:'Uetliberg',location:'ZÜRICH / UETLIBERG',place:'UETLIBERG, CH',caption:'Uetliberg · Zürich · Schweiz',coordinates:'47°20′58″ N<br>8°29′29″ E',ortho:'uetliberg',title:'Skyline Run',difficulty:'TECHNISCH',tagline:'TRAIL & FLOW',lines:['flow']},
  lenzerheide:{id:'lenzerheide',number:'02',label:'Lenzerheide',location:'GRAUBÜNDEN / LENZERHEIDE',place:'LENZERHEIDE, CH',caption:'Scharmoin · Lenzerheide · Schweiz',coordinates:'46°44′33″ N<br>9°34′23″ E',ortho:'ortho',title:'Alpine Flow',difficulty:'FLOW',tagline:'ALPINE FLOW',lines:['flow','technical']}
 });
-const localFiles=new Set(['region.json','trail.json','forest.json','decor.json','height.bin','surface.bin','sources.json','art-sources.json','surface-mask.png','corridor.glb','terrain-high.glb','terrain-mobile.glb','panorama.glb','landmark.glb','ortho-4k.webp','ortho-2k.webp','floor-color.webp','floor-normal.webp','floor-arm.webp','tree-v2-high.glb','tree-v2-mobile.glb','tree-impostor.webp']);
+const localFiles=new Set(['region.json','trail.json','forest.json','decor.json','height.bin','surface.bin','sources.json','art-sources.json','surface-mask.png','corridor.glb','terrain-high.glb','terrain-mobile.glb','panorama.glb','landmark.glb','ortho-4k.webp','ortho-2k.webp','floor-color.webp','floor-normal.webp','floor-arm.webp','tree-v2-high.glb','tree-v2-mobile.glb','tree-impostor.webp','surface-details.json','surface-details.bin','corridor-v3-high.glb','corridor-v3-mobile.glb','tree-v3-high.glb','tree-v3-mobile.glb']);
 export function getSelection(search='',preferred='uetliberg',preferredLine='flow'){
  const params=new URLSearchParams(search),id=params.has('region')?params.get('region'):preferred;
  const region=REGIONS[id]||REGIONS.uetliberg,requested=params.get('line')||(params.has('region')?'flow':preferredLine);
@@ -16,8 +16,8 @@ export function assetPath(selection,name){
  return 'assets/lenzerheide/'+name;
 }
 export function recordKeys(selection){
- const suffix=selection.id==='uetliberg'?'v2':`lenzerheide.${selection.line}.v1`;
- return {best:'best.'+suffix,ghost:'ghost.'+suffix};
+ const suffix=`${selection.id}.${selection.line}.v3`;
+ return {best:'best.'+suffix,ghost:'ghost.'+suffix,splits:'splits.'+suffix};
 }
 export function selectionUrl(base,id,line='flow'){
  const selection=getSelection('?region='+encodeURIComponent(id)+'&line='+encodeURIComponent(line));
