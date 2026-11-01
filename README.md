@@ -1,12 +1,14 @@
 # Trapanotto Downhill Biking
 
-A playable Three.js downhill biking game on **real Uetliberg terrain above Zürich**, for desktop and smartphones.
+A playable Three.js downhill biking game on **real Swiss terrain at Uetliberg and Lenzerheide**, for desktop and smartphones.
 
 **Play:** https://trapanotto.github.io/downhill/
 
 ## Ride
 
-- 7 km² of prebuilt Swiss terrain; a designed **1.89 km Skyline Run** with **371 m descent**.
+- Select **Uetliberg / Skyline Run** (1.89 km, 371 m descent) or **Lenzerheide / Alpine Flow** (2.89 km, 402 m descent).
+- Lenzerheide also includes **Roots Line**, a shorter technical alternative (1.84 km), with its own checkpoints, times and ghost.
+- 7 km² at Uetliberg; 5.29 km² playable Lenzerheide terrain plus a prebuilt surrounding mountain panorama. Only the selected region is loaded before riding.
 - Time trial with ordered checkpoints, medals, a saved personal best and a local ghost; free ride mode.
 - 120 Hz bicycle handling with filtered steering, progressive brakes, rear-wheel slip, rider weight shift, charged bunnyhops, damped suspension, classified landings, trunk collisions and checkpoint respawn.
 - Animated full-suspension bike and rider; 4,200 broadleaf trees with photographic branch cards nearby and prebaked tree views in the distance. PBR ground, 572 rocks, 382 ferns, 2,288 grass clumps, 34 roots, shadows and dust.
@@ -25,7 +27,7 @@ A playable Three.js downhill biking game on **real Uetliberg terrain above Züri
 | Respawn | R | Crash dialog; +3 seconds in a time trial |
 | Camera / pause / sound | C / P or Escape / M | On-screen buttons |
 
-Landscape orientation is recommended on a phone; portrait is supported. Actual speed and graphical fidelity depend on device/browser capabilities. There is no multiplayer server.
+Landscape orientation is recommended on a phone; portrait is supported. Actual speed and graphical fidelity depend on device/browser capabilities. There is no multiplayer server. Regions and lines have independent local best times and ghosts. Existing Uetliberg V2 records are retained. Selection is shareable through `?region=uetliberg`, `?region=lenzerheide` and `?region=lenzerheide&line=technical`.
 
 ## Local development
 
@@ -72,6 +74,30 @@ node scripts/optimize_models.mjs
 ```
 
 The preparation script downloads source tiles to a sibling `geodata/` cache. The game uses only the derived static files in `public/assets/`. Raw source tiles are intentionally excluded from Git. No swisstopo, map tile or elevation API is called while playing. Model geometry uses Meshopt compression, decoded locally by the bundled Three.js decoder.
+
+## Lenzerheide / Alpine Flow
+
+`Lenzerheide.blend` contains the complete editable second region: both graded routes, linked conifers, grass, ferns, stones, technical-route roots, bike/rider and a simplified Scharmoin shelter. The shelter is artistic geometry, not a building survey. The routes are fictional gameplay designs inspired by the landscape; they do not reproduce official Bike Kingdom lines.
+
+- Playable extent: **E 2,761,400–2,763,700 / N 1,178,200–1,180,500**. Local origin: **E 2,762,500 / N 1,179,200**, vertical origin **1,400 m LN02**.
+- Surrounding mountain extent: E 2,760,000–2,766,000 / N 1,176,000–1,182,000; geometry resampled offline at 32 m and textured with a fixed 2048 px aerial mosaic.
+- Frozen sources: **swissALTI3D 2023, 2 m**, and **SWISSIMAGE 2025, 10 cm**. Thirty-six elevation tiles and thirty-six aerial tiles are documented with URLs, byte sizes and SHA-256 hashes in `public/assets/lenzerheide/sources.json`.
+- Collision heightfield: 2 m; near terrain meshes: 4 m desktop / 8 m mobile. The 1 m route corridor is interpolated from the 2 m source. Both routes are locally graded; berms and five small rounded rollers are authored additions.
+- 2,700 conifers, 3,464 grass clumps, 578 stones, 72 ferns and 38 technical-route roots are stored as fixed placements. Tree geometry derives from the smaller C variation of Poly Haven's CC0 `fir_tree_01`, reduced and baked in Blender. Meadow maps derive from CC0 `leafy_grass`. Source records: `public/assets/lenzerheide/art-sources.json`; shared art retains the root art manifest.
+
+Rebuild the second region after preparing the existing Uetliberg source and shared art:
+
+```sh
+.venv/bin/python scripts/download_lenzerheide.py
+.venv/bin/python scripts/prepare_alpine_art.py
+.venv/bin/python scripts/prepare_lenzerheide.py
+blender --background --python-exit-code 1 --python scripts/build_alpine_fir.py
+blender --background --python-exit-code 1 --python scripts/build_lenzerheide.py
+.venv/bin/python scripts/finalize_alpine_art.py
+node scripts/optimize_models.mjs public/assets/lenzerheide
+```
+
+The source downloader replays the tracked frozen manifest and checks hashes by default. `--refresh` explicitly selects a new catalog snapshot. Downloads and authoring intermediates live in the sibling `geodata/lenzerheide/` cache, excluded from the repository and the published game. Runtime region changes reload only local, prebuilt assets; they never call swisstopo or Poly Haven. **Spiel offline speichern** stores both regions and both Alpine lines, so selection also works offline after saving.
 
 ## Offline
 

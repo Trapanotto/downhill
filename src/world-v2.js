@@ -29,6 +29,7 @@ export async function loadWorldV2({scene,renderer,loader,textures,asset,meta,for
     vec2 floorUv=vSurfaceWorld.xz/3.2;
     vec2 trailUv=vSurfaceWorld.xz/2.7;
     float nearSurface=1.0-smoothstep(110.0,260.0,distance(cameraPosition,vSurfaceWorld));
+    ${meta.biome==='alpine'?'nearSurface*=mask.b;':''}
     vec3 groundColor=texture2D(floorColor,floorUv).rgb;
     vec3 pathColor=texture2D(trailColor,trailUv).rgb;
     vec3 localColor=mix(groundColor*.86,pathColor*vec3(.62,.51,.39),mask.r);

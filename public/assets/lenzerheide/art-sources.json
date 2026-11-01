@@ -1,0 +1,159 @@
+{
+  "provider": "Poly Haven",
+  "license": "https://polyhaven.com/license",
+  "assets": [
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/1k/fir_tree_01/fir_tree_01_1k.gltf",
+      "license": "CC0-1.0",
+      "sha256": "72e49eefb4ed4db6a8ca5e17fb10980f8463dd300d94589ac774cde95ade7709",
+      "bytes": 30279,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_bark_nor_gl_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "6a570ab53ab2249ecdfa93e7d3b9a8a2cb1a8ad391400e5a64c708914779b2c3",
+      "bytes": 1137533,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_bark_diff_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "a5d25150ba1bee10008c039f98aa3c73b4477a404d6715c511ca9b5b0f4a9077",
+      "bytes": 776567,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_bark_arm_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "95d4e9e62cd309fbc38a175e2306379c76c062425b09c0fb72c5b7356a719123",
+      "bytes": 789264,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_a_nor_gl_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "9d46c05be22de0dcc4af7e3703fde4c7397644b9faeff4914c0469a6bde99caf",
+      "bytes": 997355,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_a_diff_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "cfb646cbc4b6cb2db410eb4342174ebe7812a4ae03520491e788722cf1867286",
+      "bytes": 789806,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_a_arm_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "2e439391e98f427207a7fc180eb262f4c1ab3ca0ef570785ea7352826bac342b",
+      "bytes": 788967,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_twig_nor_gl_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "d470dc39b1d02bbeba06feb0ad818680ef3c24623b4db597270301a5fb8c9369",
+      "bytes": 472604,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_twig_diff_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "8c0833a10e4fd44498d848cf9e659fe250a3813984cbd679f42430eb98c61fb8",
+      "bytes": 371741,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_twig_arm_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "d66c81fc073ee7ea97a76b6da2399769f16944e50ef0e007f09c95619f597c79",
+      "bytes": 407309,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_b_nor_gl_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "5e498ee6fee29437196085620c978346ba6731edad8bfc2a2642868f8bf64efe",
+      "bytes": 915273,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_b_diff_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "9d39263a9243a4b6cd669de5e3a504eae32d52f5ab48e471cad5f7e52e052508",
+      "bytes": 687662,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/jpg/1k/fir_tree_01/fir_tree_01_trunk_b_arm_1k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "c9e0571b2067cad25a4553119204874e6a5ea3156043cacbd5171155d856cff4",
+      "bytes": 732269,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "fir_tree_01",
+      "source": "https://polyhaven.com/a/fir_tree_01",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Models/gltf/8k/fir_tree_01/fir_tree_01.bin",
+      "license": "CC0-1.0",
+      "sha256": "ba2ef15a1061a84c73b0a74643e88c118f801ce1664ca7a25a6a79bcc2c63790",
+      "bytes": 478462204,
+      "derivative": "offline Blender conifer bake / LOD"
+    },
+    {
+      "asset": "leafy_grass",
+      "source": "https://polyhaven.com/a/leafy_grass",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_diff_2k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "8e1c6d21365d4b89bc5a35ab664da98a78dbc3ab9ba6100474881c8619a5b113",
+      "bytes": 4766204,
+      "derivative": "floor-color.webp"
+    },
+    {
+      "asset": "leafy_grass",
+      "source": "https://polyhaven.com/a/leafy_grass",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_nor_gl_2k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "df0cf0ce96e653f033e5b934d5b12995464bda027aa53bd12e329be889aa9f45",
+      "bytes": 6047262,
+      "derivative": "floor-normal.webp"
+    },
+    {
+      "asset": "leafy_grass",
+      "source": "https://polyhaven.com/a/leafy_grass",
+      "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/2k/leafy_grass/leafy_grass_arm_2k.jpg",
+      "license": "CC0-1.0",
+      "sha256": "70d61c669fe9d186a84f5bb50e8a337083014d7e46534306a89d47d48fd5eb0e",
+      "bytes": 4116600,
+      "derivative": "floor-arm.webp"
+    }
+  ]
+}

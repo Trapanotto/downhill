@@ -1,0 +1,51 @@
+{
+  "id": "lenzerheide",
+  "name": "Lenzerheide \u00b7 Graub\u00fcnden",
+  "biome": "alpine",
+  "crs": "EPSG:2056 / LN02",
+  "bounds": [
+    2761400,
+    1178200,
+    2763700,
+    1180500
+  ],
+  "origin": [
+    2762500,
+    1179200
+  ],
+  "heightOrigin": 1400,
+  "width": 1151,
+  "height": 1151,
+  "step": 2,
+  "minAltitude": 1482.054443359375,
+  "maxAltitude": 2210.50634765625,
+  "source": "\u00a9swisstopo",
+  "sourceSnapshot": "2026-11-01",
+  "heightDataYear": "2023",
+  "imageDataYear": "2025",
+  "sourceResolution": 2,
+  "terrainNote": "2 m source with locally graded fictional routes and small authored rollers. Panorama: offline 32 m resampling.",
+  "trailNotice": "Eigens gestaltete Spielrouten; keine Nachbildung oder Navigation der offiziellen Bikepark-Linien.",
+  "rollers": [
+    [
+      340.0167662924625,
+      236.02392841522087
+    ],
+    [
+      197.62860082304525,
+      335.23919753086415
+    ],
+    [
+      -5.702108452894044,
+      313.72011974611314
+    ],
+    [
+      -213.2173951297156,
+      291.6695661215692
+    ],
+    [
+      -371.6938888888889,
+      378.0827777777778
+    ]
+  ]
+}

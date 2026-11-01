@@ -12,3 +12,9 @@ assert.match(await load('assets/region.json?v=future'),/^network:/);assert.equal
 online=false;assert.equal(await load('assets/region.json?v='+version),'cached-current');
 await cache.put(root+'index.html',new Response('offline-game-shell'));assert.equal(await load('','navigate'),'offline-game-shell');
 console.log('Offline worker: current-version cache, version migration and offline shell passed.');
+await cache.put(root+'assets/lenzerheide/region.json',new Response('alpine-region'));
+assert.equal(await load('assets/lenzerheide/region.json?v='+version),'alpine-region');
+assert.equal(await load('?region=lenzerheide&line=technical','navigate'),'offline-game-shell');
+const packaged=JSON.parse(fs.readFileSync('dist/offline-files.json'));
+for(const file of ['assets/region.json','assets/lenzerheide/region.json','assets/lenzerheide/trail.json','assets/lenzerheide/trail-technical.json','assets/lenzerheide/panorama.glb'])assert.ok(packaged.includes(file),'Missing offline region asset: '+file);
+console.log('Both regions, technical line and query-string offline navigation passed.');

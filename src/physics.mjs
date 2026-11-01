@@ -21,7 +21,7 @@ export class HeightField{
   const distance=this.interpolate(this.surfaceData,x,z)*32/255;
   if(distance<1.7)return {name:'Trail',grip:1,resistance:.09,distance};
   if(distance<3.2)return {name:'Trailrand',grip:.85,resistance:.14,distance};
-  return {name:'Waldboden',grip:.68,resistance:.25,distance};
+  return {name:this.meta.biome==='alpine'?'Alpwiese':'Waldboden',grip:.68,resistance:.25,distance};
  }
  rootKey(x,z){return `${Math.floor(x/8)},${Math.floor(z/8)}`}
  contactHeight(x,z){
