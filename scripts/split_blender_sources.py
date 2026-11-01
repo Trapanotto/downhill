@@ -4,7 +4,7 @@ import bpy,json,math
 from mathutils import Vector
 R=Path(__file__).resolve().parents[1];OUT=R/'blender';OUT.mkdir(exist_ok=True)
 RIDER={'BikeFrame','SuspensionFork','WheelFront','WheelRear','Handlebar','Crank','PedalL','PedalR','RiderRig','RiderSkin'}
-manifest={'version':3,'regions':{}}
+manifest={'version':4,'regions':{}}
 def library(file,label,objects,world):
  scene=bpy.data.scenes.new(label+' / edit');scene.world=world;group=bpy.data.collections.new(label);scene.collection.children.link(group)
  for o in objects:group.objects.link(o)
@@ -22,13 +22,13 @@ for region,sourceFile in [('uetliberg','Uetliberg.blend'),('lenzerheide','Lenzer
   n=o.name.lower()
   if o.name in RIDER:riders.append(o);continue
   if any(t in n for t in ['terrain','uetliberg_','panorama','ruts berms takeoffs']):key='Terrain'
-  elif any(t in n for t in ['forest','tree-v3','/ grass','/ fern']):key='Vegetation'
+  elif any(t in n for t in ['forest','tree-v3','tree-v4','/ grass','/ fern']):key='Vegetation'
   else:key='Props'
   groups[key].append(o)
  assert len(riders)==10,(region,[o.name for o in riders])
  parts=[library(OUT/region/(key+'.blend'),region+'_'+key,objects,source.world) for key,objects in groups.items()]
  assert sum(p['objects'] for p in parts)+len(riders)==len(source.objects)
- master=bpy.data.scenes.new(region+' / linked assembly');master.world=source.world;master.render.engine='CYCLES';master['Version']='3.0 / linked Blender sources';master['Instructions']='Edit the individual regional libraries; keep this folder structure together. Rider and bike are shared by both regions.'
+ master=bpy.data.scenes.new(region+' / linked assembly');master.world=source.world;master.render.engine='CYCLES';master['Version']='4.0 / linked Blender sources';master['Instructions']='Edit the individual regional libraries; keep this folder structure together. Rider and bike are shared by both regions.'
  for part in parts+[manifest['rider']]:
   with bpy.data.libraries.load(str(OUT/part['file']),link=True) as (available,target):target.collections=[part['collection']]
   col=target.collections[0]

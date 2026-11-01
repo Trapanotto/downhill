@@ -9,7 +9,7 @@ for region,record in m['regions'].items():
   bpy.ops.wm.open_mainfile(filepath=str(root/p['file']));scene=bpy.context.scene;assert len(scene.objects)==p['objects'],p
   assert bpy.data.collections.get(p['collection']) is not None
   for image in bpy.data.images:
-   if image.source=='FILE' and image.has_data:assert image.packed_file is not None,image.name
+   if image.source=='FILE':assert image.packed_file is not None and image.size[0]>0,image.name
   for o in scene.objects:
    if o.hide_render:assert o.hide_get(view_layer=scene.view_layers[0]),o.name
  bpy.ops.wm.open_mainfile(filepath=str(root/record['master']));scene=bpy.context.scene

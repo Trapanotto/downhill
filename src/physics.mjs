@@ -1,3 +1,4 @@
+import {normalizeSetup,setupParameters} from './setup.mjs';
 export const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 export const wrapAngle=a=>Math.atan2(Math.sin(a),Math.cos(a));
 const approach=(value,target,rate,dt)=>value+(target-value)*(1-Math.exp(-rate*dt));
@@ -53,19 +54,20 @@ export class TrailTracker{
 
 /** A deterministic 120 Hz bicycle controller. Rendering never changes physics. */
 export class BikePhysics{
- constructor(terrain,trail){this.terrain=terrain;this.trail=trail;this.reset()}
+ constructor(terrain,trail,setup={}){this.terrain=terrain;this.trail=trail;this.setSetup(setup);this.reset()}
+ setSetup(value){this.setup=normalizeSetup(value);this.tune=setupParameters(value)}
  reset(index=0){
   const p=this.trail.points[index],q=this.trail.points[Math.min(index+8,this.trail.points.length-1)];
   this.x=p[0];this.z=p[2];this.y=this.terrain.sample(this.x,this.z)+.03;
   this.yaw=Math.atan2(-(q[0]-p[0]),-(q[2]-p[2]));this.travelYaw=this.yaw;
-  Object.assign(this,{speed:0,vy:0,air:false,airtime:0,maxSpeed:0,distance:0,pitch:0,lean:0,steer:0,weight:0,crashed:false,jumpCooldown:0,jumpCharge:0,landingImpact:0,landingSerial:0,landingQuality:'',frontCompression:.025,rearCompression:.025,frontSpringVelocity:0,rearSpringVelocity:0,slip:0,frontContact:0,rearContact:0,_jumpHeld:false,_lastGroundV:0,acceleration:0,brakePressure:0,frontLoad:.52,rearSlip:0,previousX:this.x,previousY:this.y,previousZ:this.z,crashReason:''});
+  Object.assign(this,{speed:0,vy:0,air:false,airtime:0,maxSpeed:0,distance:0,pitch:0,lean:0,steer:0,weight:0,crashed:false,jumpCooldown:0,jumpCharge:0,landingImpact:0,landingSerial:0,landingQuality:'',frontCompression:.025,rearCompression:.025,frontSpringVelocity:0,rearSpringVelocity:0,slip:0,frontContact:0,rearContact:0,_jumpHeld:false,_lastGroundV:0,acceleration:0,brakePressure:0,frontLoad:.52,rearSlip:0,previousX:this.x,previousY:this.y,previousZ:this.z,crashReason:'',atBoundary:false});
   this.surface=this.terrain.surfaceAt?.(this.x,this.z)||{name:'Trail',grip:1,resistance:.09};
   this._groundHeight=(this.contact(this.x-Math.sin(this.yaw)*.72,this.z-Math.cos(this.yaw)*.72)+this.contact(this.x+Math.sin(this.yaw)*.72,this.z+Math.cos(this.yaw)*.72))*.5;this.y=this._groundHeight+.03;
  }
  contact(x,z){return this.terrain.contactHeight?.(x,z)??this.terrain.sample(x,z)}
- spring(which,target,dt){const key=which+'Compression',velocity=which+'SpringVelocity';this[velocity]+=((target-this[key])*170-this[velocity]*24)*dt;this[key]=clamp(this[key]+this[velocity]*dt,0,.21)}
+ spring(which,target,dt){const key=which+'Compression',velocity=which+'SpringVelocity';this[velocity]+=((target*this.tune.compression-this[key])*this.tune.stiffness-this[velocity]*this.tune.damping)*dt;this[key]=clamp(this[key]+this[velocity]*dt,0,this.tune.travel)}
  step(dt,input){
-  if(this.crashed)return;
+  if(this.crashed)return;this.atBoundary=false;
   this.jumpCooldown=Math.max(0,this.jumpCooldown-dt);
   this.steer=approach(this.steer,clamp(input.steer||0,-1,1)*(input.sensitivity??1),13,dt);
   this.weight=approach(this.weight,clamp(input.weight||0,-1,1),7,dt);
@@ -75,18 +77,20 @@ export class BikePhysics{
   const fx=-Math.sin(this.travelYaw),fz=-Math.cos(this.travelYaw),gradient=this.terrain.gradient(this.x,this.z),slope=gradient.x*fx+gradient.z*fz;
   const oldSpeed=this.speed,drive=amount(input.throttle)>0&&frontBrake+rearBrake<.03?8*amount(input.throttle)/(1+this.speed*.05):0;
   const gravity=-9.81*slope/Math.sqrt(1+slope*slope);
-  const resistance=this.surface.resistance*this.speed+.006*this.speed*this.speed;
+  const resistance=(this.surface.resistance+this.tune.rolling-.09)*this.speed+.006*this.speed*this.speed;
   this.frontLoad=clamp(.52+frontBrake*.15+this.weight*.13-slope*.04,.28,.80);
   this.brakePressure=Math.max(frontBrake,rearBrake);
-  const traction=13.5*this.surface.grip/Math.sqrt(1+slope*slope);
-  const frontForce=Math.min(frontBrake*11.5,traction*this.frontLoad),rearForce=Math.min(rearBrake*7.2,traction*(1-this.frontLoad));
+  const traction=13.5*this.surface.grip*this.tune.grip/Math.sqrt(1+slope*slope);
+  const frontForce=Math.min(frontBrake*11.5*this.tune.brake,traction*this.frontLoad),rearForce=Math.min(rearBrake*7.2*this.tune.brake,traction*(1-this.frontLoad));
   const brakingForce=frontForce+rearForce;
-  this.rearSlip=clamp((rearBrake*7.2-rearForce)/7.2,0,1);
+  this.rearSlip=clamp((rearBrake*7.2*this.tune.brake-rearForce)/7.2,0,1);
   this.speed=clamp(this.speed+(drive+gravity-resistance-(this.air?0:brakingForce))*dt,0,27);
   // Steering response softens at speed; tyre grip controls how quickly momentum follows.
+  const t=this.terrain,nearEdge=Number.isFinite(t.minX)&&Math.min(this.x-t.minX,t.maxX-this.x,this.z-t.minZ,t.maxZ-this.z)<4.5;
+  if(nearEdge&&this.speed<1&&Math.abs(this.steer)>.05){this.yaw-=this.steer*dt*1.3;this.travelYaw=this.yaw;}
   const steeringGain=this.speed*.153/(1+this.speed*.029);
   this.yaw-=this.steer*steeringGain*(this.air?.18:1)*dt;
-  const grip=this.surface.grip*(1-this.rearSlip*.28)*(1+this.weight*.06);
+  const grip=this.surface.grip*this.tune.grip*(1-this.rearSlip*.28)*(1+this.weight*.06);
   const remaining=Math.sqrt(Math.max(.12,1-(brakingForce/Math.max(1,traction))**2));
   const maxTurn=(traction*remaining+Math.abs(gradient.x*Math.cos(this.yaw)-gradient.z*Math.sin(this.yaw))*1.8)/Math.max(2,this.speed);
   const wanted=wrapAngle(this.yaw-this.travelYaw)*(this.air?1.3:22*grip);
@@ -115,7 +119,7 @@ export class BikePhysics{
    this.vy-=9.81*dt;this.y+=this.vy*dt;this.airtime+=dt;
    if(this.y<=ground+.03){
     landing=Math.max(0,(groundV-this.vy)/Math.sqrt(1+slope*slope));this.landingImpact=landing;this.landingSerial++;
-    const alignment=Math.abs(this.pitch-groundPitch),absorption=1+Math.max(0,-this.weight)*.25;
+    const alignment=Math.abs(this.pitch-groundPitch),absorption=this.tune.absorption+Math.max(0,-this.weight)*.25;
     this.landingQuality=landing<8&&alignment<.45?'smooth':'hard';
     if(landing/absorption>23||alignment>.95&&landing>11){this.crashed=true;this.landingQuality='crash'}
     this.y=ground+.03;this.vy=0;this.air=false;this.speed*=1-clamp(landing*.003,0,.10);
@@ -133,7 +137,7 @@ export class BikePhysics{
   const targetPitch=this.air?clamp(this.vy/24-this.weight*.25,-.6,.6):groundPitch;
   this.pitch=approach(this.pitch,targetPitch,this.air?3.5:15,dt);
   this.landingImpact=approach(this.landingImpact,0,5,dt);
-  if(!this.terrain.contains(this.x,this.z))this.crashed=true;
+  if(!this.terrain.contains(this.x,this.z)){this.atBoundary=true;const t=this.terrain;this.x=Number.isFinite(t.minX)?clamp(this.x,t.minX+4.1,t.maxX-4.1):this.previousX;this.z=Number.isFinite(t.minZ)?clamp(this.z,t.minZ+4.1,t.maxZ-4.1):this.previousZ;this.speed=0;this.vy=0;this.air=false;this.y=this.contact(this.x,this.z)+.03;}
  }
 }
 

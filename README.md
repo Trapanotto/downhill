@@ -27,9 +27,36 @@ A playable Three.js downhill biking game on **real Swiss terrain at Uetliberg an
 | Respawn | R | Crash dialog; +3 seconds in a time trial |
 | Camera / pause / sound | C / P or Escape / M | On-screen buttons |
 
-Landscape orientation is recommended on a phone; portrait is supported. Actual speed and graphical fidelity depend on device/browser capabilities. There is no multiplayer server. Regions and lines have independent local best times and ghosts. V3 starts separate best-time, ghost and checkpoint-split records for every route; older records remain in browser storage. Selection is shareable through `?region=uetliberg`, `?region=lenzerheide` and `?region=lenzerheide&line=technical`.
+Landscape orientation is recommended on a phone; portrait is supported. Actual speed and graphical fidelity depend on device/browser capabilities. There is no multiplayer server. Regions and lines have independent local best times and ghosts. V4 starts separate best-time, ghost and checkpoint-split records for every route and bike setup; older records remain in browser storage. Selection is shareable through `?region=uetliberg`, `?region=lenzerheide` and `?region=lenzerheide&line=technical`.
 
 Editable sources are also split into portable linked assemblies in [`blender/`](blender/README.md): terrain/trail, vegetation and props per region, with one shared weighted rider/bike. Open `blender/Uetliberg.blend` or `blender/Lenzerheide.blend`; keep that folder structure together.
+
+## V4: feel, camera, free exploration and performance
+
+- Leave the marked trail freely. There is no off-route teleport or automatic respawn. At the prepared map boundary the bike stops; turn around to continue. Free ride continues after the finish area. Obstacle crashes still require an explicit respawn button or R.
+- The third-person camera follows directly behind the rider's heading, including away from the route. Terrain and obstacle checks shorten its rear arm; curve anticipation no longer swings it sideways.
+- **Bike abstimmen** offers suspension, tyre grip and brake-force sliders plus balanced, flow and technical presets. More grip increases rolling resistance; brake demand remains limited by traction. V4 records/ghosts are isolated by route and normalized setup. Older saved runs remain untouched.
+- Four local audio layers cover tyres, wind, braking and drivetrain, with short landing/crash impacts. Fixed-size skid-mark geometry and damped camera feedback add contact cues. Sound is optional.
+- Refined rider proportions, coated metal/frame materials, subtle jersey weave, irregular branch crowns and matching offline tree bakes.
+- Terrain is partitioned into 128 m cells. Near geometry uses 4 m samples; middle geometry uses 8 m desktop / 16 m mobile. One 32 m distant mesh covers the rest. The original detailed trail is partitioned and fades into the base at distance. Shared external orthophotos replace duplicate embedded aerial textures. All required geometry and data still load before riding: **no geodata streaming**.
+- Spatial vegetation buckets, view-aware detail selection, GPU-facing distant trees, fewer mobile props and lightweight contact shadows on mobile reduce render work. Dynamic tree and bike shadows remain in Ultra; balanced mode retains dynamic bike shadows. The mountain panorama is also spatially partitioned. The minimap updates at 12.5 Hz and rider IK at 30 Hz on mobile.
+- Options include an optional FPS/P95 overlay and a report of measurements from actual riding on the current device. A rolling budget reduces resolution and vegetation after sustained slow frames and restores them cautiously. Measurements exclude inactive/hidden frames. They are stored locally and are never transmitted.
+
+Validation includes 41 tests, all nine route/preset controller combinations, mobile portrait/landscape browser checks, offline loading and all nine portable Blender projects. Physical iPhone/Android performance has not been measured in this environment.
+
+Rebuild the V4 art and optimized geometry from the frozen V3 sources (full Git history required):
+
+```sh
+blender --background --python-exit-code 1 --python scripts/build_v4_art.py
+.venv/bin/python scripts/encode_v4_bakes.py
+blender --background --python-exit-code 1 --python scripts/build_v4_terrain.py
+node scripts/optimize_models.mjs public/assets v4
+node scripts/optimize_models.mjs public/assets/lenzerheide v4
+.venv/bin/python scripts/compress_blends.py
+blender --background --python-exit-code 1 --python scripts/split_blender_sources.py
+.venv/bin/python scripts/compress_blends.py blender/*.blend blender/*/*.blend
+blender --background --python-exit-code 1 --python scripts/validate_blender_split.py
+```
 
 ## V3 ride and detail update
 

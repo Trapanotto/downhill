@@ -1,6 +1,6 @@
 # Trapanotto Downhill Biking – aufgeteilte Blender-Dateien
 
-Blender 4.5 LTS. Das ganze Verzeichnis gemeinsam entpacken und seine Struktur beibehalten.
+V4 · Blender 4.5 LTS. Das ganze Verzeichnis gemeinsam entpacken und seine Struktur beibehalten.
 
 **Gesamtszene öffnen:** `Uetliberg.blend` oder `Lenzerheide.blend` in diesem Ordner. Diese kleinen Hauptdateien verknüpfen die folgenden Bibliotheken über relative Pfade:
 

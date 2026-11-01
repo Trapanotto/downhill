@@ -7,12 +7,12 @@ test('region and line selection accepts only known local routes',()=>{
  assert.equal(getSelection('?region=lenzerheide&line=technical').title,'Roots Line');assert.equal(getSelection('','lenzerheide').title,'Alpine Flow');assert.equal(getSelection('?region=lenzerheide','lenzerheide','technical').line,'flow');
  assert.equal(selectionUrl('/downhill/','lenzerheide','technical'),'/downhill/?region=lenzerheide&line=technical');
 });
-test('records stay separate for each line and start a separate V3 record generation',()=>{
- const keys=combinations.map(recordKeys);assert.equal(keys[0].best,'best.uetliberg.flow.v3');assert.equal(new Set(keys.flatMap(k=>[k.best,k.ghost])).size,6);
+test('records stay separate for each line and start separate V4 records for each bike setup',()=>{
+ const keys=combinations.map(recordKeys);assert.equal(keys[0].best,'best.uetliberg.flow.v4.50-50-50');assert.equal(new Set(keys.flatMap(k=>[k.best,k.ghost])).size,6);
 });
 test('region assets use local folders while sharing the bike and common art',()=>{
  const alpine=combinations[1],technical=combinations[2];assert.equal(assetPath(alpine,'bike.glb'),'assets/bike.glb');assert.equal(assetPath(alpine,'height.bin'),'assets/lenzerheide/height.bin');assert.equal(assetPath(technical,'trail.json'),'assets/lenzerheide/trail-technical.json');
- for(const selection of combinations)for(const name of ['region.json','trail.json','forest.json','height.bin','surface.bin','decor.json','terrain-high.glb','terrain-mobile.glb','corridor.glb','tree-v2-high.glb','tree-v2-mobile.glb','tree-impostor.webp','bike-v3.glb','rider-v3.glb','surface-details.json','surface-details.bin','corridor-v3-high.glb','corridor-v3-mobile.glb','tree-v3-high.glb','tree-v3-mobile.glb'])assert.ok(fs.existsSync('public/'+assetPath(selection,name)),selection.id+': '+name);
+ for(const selection of combinations)for(const name of ['region.json','trail.json','forest.json','height.bin','surface.bin','decor.json','terrain-v4-high.glb','terrain-v4-mobile.glb','corridor-v4-high.glb','corridor-v4-mobile.glb','tree-v2-high.glb','tree-v2-mobile.glb','tree-impostor.webp','bike-v4.glb','rider-v4.glb','surface-details.json','surface-details.bin','corridor-v3-high.glb','corridor-v3-mobile.glb','tree-v4-high.glb','tree-v4-mobile.glb','tree-impostor-v4.webp'])assert.ok(fs.existsSync('public/'+assetPath(selection,name)),selection.id+': '+name);
 });
 test('both Alpine routes align with the same complete 2 m collision field',()=>{
  const a='public/assets/lenzerheide/',meta=JSON.parse(fs.readFileSync(a+'region.json')),buffer=fs.readFileSync(a+'height.bin'),surface=fs.readFileSync(a+'surface.bin');
