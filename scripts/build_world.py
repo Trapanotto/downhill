@@ -11,7 +11,7 @@ W,S,E,N=meta['bounds']; OE,ON=meta['origin']; H0=meta['heightOrigin']
 random.seed(381)
 bpy.ops.object.select_all(action='SELECT');bpy.ops.object.delete(use_global=False)
 def height(x,z):
- u=max(0,min(h.shape[1]-1.001,(x+OE-W)/4));v=max(0,min(h.shape[0]-1.001,(z+N-ON)/4));i=int(u);j=int(v);a=u-i;b=v-j
+ u=max(0,min(h.shape[1]-1.001,(x+OE-W)/meta['step']));v=max(0,min(h.shape[0]-1.001,(z+N-ON)/meta['step']));i=int(u);j=int(v);a=u-i;b=v-j
  return float((h[j,i]*(1-a)+h[j,i+1]*a)*(1-b)+(h[j+1,i]*(1-a)+h[j+1,i+1]*a)*b)-H0
 
 def mat(name,col,metal=0,rough=.8):
@@ -39,7 +39,7 @@ def terrain(step,name):
  vs=[];uv=[]
  for j in rows:
   for i in cols:
-   x=W+i*4-OE;z=N-j*4-ON
+   x=W+i*meta['step']-OE;z=N-j*meta['step']-ON
    vs.append((x,z,float(h[j,i])-H0));uv.append((i/(h.shape[1]-1),1-j/(h.shape[0]-1)))
  fs=[];nw=len(cols)
  for j in range(len(rows)-1):
@@ -47,8 +47,8 @@ def terrain(step,name):
    a=j*nw+i;fs.append((a,a+nw,a+nw+1,a+1))
  return mesh(name,vs,fs,soil,uv)
 print('Building actual terrain',flush=True)
-th=terrain(1,'Uetliberg_4m');export('terrain-high.glb',[th]);th.hide_set(True)
-tl=terrain(2,'Uetliberg_8m');export('terrain-mobile.glb',[tl]);tl.hide_set(True)
+th=terrain(max(1,4//meta['step']),'Uetliberg_4m');export('terrain-high.glb',[th]);th.hide_set(True)
+tl=terrain(max(1,8//meta['step']),'Uetliberg_8m');export('terrain-mobile.glb',[tl]);tl.hide_set(True)
 # Designed trail, with coordinates in metres east / south relative to the local LV95 origin.
 controls=[[45,170],[30,130],[15,80],[20,25],[0,-30],[25,-80],[50,-110],[40,-170],[80,-220],[110,-250],[60,-300],[115,-350],[150,-400],[120,-470],[180,-520],[260,-570],[300,-640],[260,-710],[320,-770],[400,-820],[390,-900],[480,-960],[550,-1010],[520,-1090],[620,-1190]]
 points=[]
@@ -114,7 +114,7 @@ while len(positions)<4200 and tries<60000:
 (A/'forest.json').write_text(json.dumps(positions,separators=(',',':')))
 # Full-suspension bike, local Blender -Y forward, exported to Three.js -Z.
 rubber=mat('Tyres',(.018,.022,.021),.02,.94);metal=mat('Brushed alloy',(.34,.38,.4),.8,.29);carbon=mat('Carbon',(.025,.033,.034),.35,.38);orange=mat('Burnt orange frame',(.88,.19,.045),.38,.3);chrome=mat('Fork stanchions',(.72,.7,.58),.85,.2);jersey=mat('Technical jersey',(.82,.22,.075),0,.75);pants=mat('Riding trousers',(.035,.065,.058));skin=mat('Skin',(.58,.36,.23));visor=mat('Goggle lens',(.07,.15,.16),.6,.14)
-bikeparts=[];wheelgroups=[]
+bikeparts=[];forkparts=[];wheelgroups=[]
 def xyz(x,y,z):return (x,-z,y)
 def tube(a,b,r,ma=carbon,name='Frame',vertices=12):return cylinder(name,xyz(*a),xyz(*b),r,ma,vertices)
 def sphere(p,sc,ma,name='Rider'):return ball(name,xyz(*p),(sc[0],sc[2],sc[1]),ma,3)
@@ -142,18 +142,18 @@ for a,b,r in [('bb','seat',.046),('seat','head',.04),('head','bb',.065),('rear',
   for x in [-.085,.085]:bikeparts.append(tube((x,*nodes[a][1:]),(x,*nodes[b][1:]),r,orange))
  else:bikeparts.append(tube(nodes[a],nodes[b],r,orange))
 for x in [-.092,.092]:
- bikeparts += [tube((x,.43,-.72),(x,.77,-.59),.028,chrome,'Fork'),tube((x,.72,-.61),(x,1.1,-.46),.044,carbon,'Fork')]
+ forkparts += [tube((x,.43,-.72),(x,.77,-.59),.028,chrome,'Fork'),tube((x,.72,-.61),(x,1.1,-.46),.044,carbon,'Fork')]
 bikeparts += [tube((0,.64,.43),(0,.9,.06),.046,chrome,'Rear shock'),tube((0,.96,.29),(0,1.12,.32),.025,metal,'Seat post'),sphere((0,1.12,.34),(.13,.04,.2),carbon,'Saddle'),tube((0,1.1,-.46),(0,1.18,-.59),.026,carbon,'Stem'),tube((-.39,1.18,-.59),(.39,1.18,-.59),.019,carbon,'Handlebar')]
 for x in [-.35,.35]:bikeparts.append(tube((x-.05,1.18,-.59),(x+.05,1.18,-.59),.028,rubber,'Grip'))
 bikeparts += [tube((-.14,.48,.18),(.14,.48,.18),.028,metal,'Crank'),tube((-.14,.48,.18),(-.14,.34,.27),.022,carbon,'Crank'),tube((.14,.48,.18),(.14,.62,.09),.022,carbon,'Crank')]
-frame=join(bikeparts,'BikeFrame')
+frame=join(bikeparts,'BikeFrame');fork=join(forkparts,'SuspensionFork')
 # Anatomical riding posture, clothing and full-face helmet.
 body=[sphere((0,1.4,.29),(.22,.2,.18),pants),tube((0,1.4,.25),(0,1.88,-.12),.23,jersey,'Torso',20),sphere((0,1.92,-.17),(.22,.18,.2),jersey)]
 for side in [-1,1]:
  x=side*.19;hand=side*.34
  body += [tube((x,1.84,-.14),(side*.36,1.53,-.27),.084,jersey,'Upper arm',16),tube((side*.36,1.53,-.27),(hand,1.22,-.57),.064,skin,'Forearm',16),sphere((hand,1.21,-.58),(.068,.07,.075),carbon,'Glove'),tube((x,1.42,.27),(side*.27,1.02,-.1),.115,pants,'Thigh',16),tube((side*.27,1.02,-.1),(side*.16,.59,.14),.083,pants,'Shin',16),sphere((side*.16,.55,.05),(.09,.065,.17),carbon,'Shoe'),sphere((side*.27,1.01,-.1),(.11,.105,.11),carbon,'Knee pad')]
 body += [sphere((0,2.12,-.37),(.2,.24,.23),carbon,'Full face helmet'),sphere((0,2.14,-.52),(.18,.105,.055),visor,'Goggles'),tube((-.17,2.04,-.45),(-.12,1.96,-.64),.035,carbon,'Chin guard'),tube((.17,2.04,-.45),(.12,1.96,-.64),.035,carbon,'Chin guard'),tube((-.12,1.96,-.64),(.12,1.96,-.64),.035,carbon,'Chin guard')]
-rider=join(body,'Rider');export('bike.glb',[frame,rider]+wheelgroups)
+rider=join(body,'Rider');export('bike.glb',[frame,fork,rider]+wheelgroups)
 # Landmark at the summit, deliberately simplified architectural geometry.
 land=[];tx=-8;tz=198;ty=height(tx,tz)
 for dx in [-2,2]:
@@ -169,7 +169,7 @@ bpy.ops.mesh.primitive_cube_add(size=1,location=xyz(tx,ty+28.8,tz));deck=bpy.con
 landmark=join(land,'Summit landmark');export('landmark.glb',[landmark])
 # Preserve the complete authored scene for editing, with packed aerial imagery.
 terrainmat=mat('swisstopo aerial terrain',(1,1,1));nt=terrainmat.node_tree;tex=nt.nodes.new('ShaderNodeTexImage');tex.image=im;nt.links.new(tex.outputs['Color'],nt.nodes.get('Principled BSDF').inputs['Base Color']);th.data.materials.clear();th.data.materials.append(terrainmat);th.hide_set(False)
-for o in [frame,rider]+wheelgroups:o.location+=Vector((45,-170,height(45,170)))
+for o in [frame,fork,rider]+wheelgroups:o.location+=Vector((45,-170,height(45,170)))
 # All instance positions are in the file; external texture packed for a self-contained source.
 im.pack();bpy.context.scene['Sources']='©swisstopo; see public/assets/sources.json';bpy.context.scene['Coordinate origin']='LV95 2679500 / 1245000, height 400 m LN02';bpy.context.scene['Trail']='Fictional gameplay trail on real Uetliberg terrain.'
 bpy.ops.wm.save_as_mainfile(filepath=str(ROOT/'Uetliberg.blend'),compress=True)

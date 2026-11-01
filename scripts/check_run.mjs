@@ -1,5 +1,5 @@
 import fs from 'node:fs';import {HeightField,BikePhysics,TrailTracker,TreeCollisions,clamp,wrapAngle} from '../src/physics.mjs';
-const meta=JSON.parse(fs.readFileSync('public/assets/region.json')),buf=fs.readFileSync('public/assets/height.bin'),h=new HeightField(meta,new Float32Array(buf.buffer,buf.byteOffset,buf.byteLength/4)),trail=JSON.parse(fs.readFileSync('public/assets/trail.json')),b=new BikePhysics(h,trail),t=new TrailTracker(trail);
+const meta=JSON.parse(fs.readFileSync('public/assets/region.json')),buf=fs.readFileSync('public/assets/height.bin'),h=new HeightField(meta,new Float32Array(buf.buffer,buf.byteOffset,buf.byteLength/4),new Uint8Array(fs.readFileSync('public/assets/surface.bin')),JSON.parse(fs.readFileSync('public/assets/decor.json')).roots),trail=JSON.parse(fs.readFileSync('public/assets/trail.json')),b=new BikePhysics(h,trail),t=new TrailTracker(trail);
 const collisions=new TreeCollisions(JSON.parse(fs.readFileSync('public/assets/forest.json')));
 let worst=0,elapsed=0;
 for(let i=0;i<120*800;i++){

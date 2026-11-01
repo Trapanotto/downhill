@@ -12,12 +12,15 @@
     1245000
   ],
   "heightOrigin": 400,
-  "width": 626,
-  "height": 701,
-  "step": 4,
-  "minAltitude": 424.9833984375,
-  "maxAltitude": 871.8986206054688,
+  "width": 1251,
+  "height": 1401,
+  "step": 2,
+  "minAltitude": 425.08984375,
+  "maxAltitude": 871.8760375976562,
   "source": "\u00a9swisstopo",
   "sourceSnapshot": "2026-11-01",
-  "trailNotice": "Spielerisch gestaltete Strecke auf realem Gel\u00e4nde; keine reale Trail-Navigation."
+  "trailNotice": "Spielerisch gestaltete Strecke auf realem Gel\u00e4nde; keine reale Trail-Navigation.",
+  "surfaceVersion": 2,
+  "sourceResolution": 2,
+  "terrainNote": "2 m source; graded fictional trail corridor, limited to 1.6 m earthworks."
 }
