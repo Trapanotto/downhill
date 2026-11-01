@@ -1,8 +1,9 @@
 """Losslessly recompress editable Blender sources for GitHub's blob API limits."""
 from pathlib import Path
 import zstandard as zstd
+import sys
 root=Path(__file__).resolve().parents[1]
-for name in ['Uetliberg.blend','Lenzerheide.blend','Rider.blend']:
+for name in (sys.argv[1:] or ['Uetliberg.blend','Lenzerheide.blend','Rider.blend']):
  path=root/name
  with path.open('rb') as source:raw=zstd.ZstdDecompressor().stream_reader(source).read()
  if not raw.startswith(b'BLENDER'):raise ValueError('Unexpected Blender source: '+name)

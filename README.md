@@ -29,6 +29,8 @@ A playable Three.js downhill biking game on **real Swiss terrain at Uetliberg an
 
 Landscape orientation is recommended on a phone; portrait is supported. Actual speed and graphical fidelity depend on device/browser capabilities. There is no multiplayer server. Regions and lines have independent local best times and ghosts. V3 starts separate best-time, ghost and checkpoint-split records for every route; older records remain in browser storage. Selection is shareable through `?region=uetliberg`, `?region=lenzerheide` and `?region=lenzerheide&line=technical`.
 
+Editable sources are also split into portable linked assemblies in [`blender/`](blender/README.md): terrain/trail, vegetation and props per region, with one shared weighted rider/bike. Open `blender/Uetliberg.blend` or `blender/Lenzerheide.blend`; keep that folder structure together.
+
 ## V3 ride and detail update
 
 - Braking transfers load, rear braking can lose grip, and cornering shares available tyre traction with braking. Landing impact uses slope and rider absorption.

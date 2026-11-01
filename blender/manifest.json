@@ -1,0 +1,52 @@
+{
+  "version": 3,
+  "regions": {
+    "uetliberg": {
+      "master": "Uetliberg.blend",
+      "sourceObjects": 7399,
+      "parts": [
+        {
+          "file": "uetliberg/Terrain.blend",
+          "collection": "uetliberg_Terrain",
+          "objects": 4
+        },
+        {
+          "file": "uetliberg/Vegetation.blend",
+          "collection": "uetliberg_Vegetation",
+          "objects": 6874
+        },
+        {
+          "file": "uetliberg/Props.blend",
+          "collection": "uetliberg_Props",
+          "objects": 511
+        }
+      ]
+    },
+    "lenzerheide": {
+      "master": "Lenzerheide.blend",
+      "sourceObjects": 6785,
+      "parts": [
+        {
+          "file": "lenzerheide/Terrain.blend",
+          "collection": "lenzerheide_Terrain",
+          "objects": 5
+        },
+        {
+          "file": "lenzerheide/Vegetation.blend",
+          "collection": "lenzerheide_Vegetation",
+          "objects": 6240
+        },
+        {
+          "file": "lenzerheide/Props.blend",
+          "collection": "lenzerheide_Props",
+          "objects": 530
+        }
+      ]
+    }
+  },
+  "rider": {
+    "file": "shared/Rider-Bike.blend",
+    "collection": "Rider_Bike",
+    "objects": 10
+  }
+}
