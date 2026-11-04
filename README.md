@@ -22,14 +22,32 @@ A playable Three.js downhill biking game on **real Swiss terrain at Uetliberg an
 | Pedal | W / Up | Autopedal option / RT |
 | Brake | S / Down; V rear brake | Hold brake, drag up for more force / LT |
 | Steer | A D / Left Right | Left thumb pad / left stick |
-| Bunnyhop | Hold and release Space | Hold and release jump / A |
+| Bunnyhop / take-off | Hold Space, release at the lip | Hold and release jump / A |
+| Pump | E | PUMP button / RB |
+| Whip / scrub | A D in the air | Thumb pad in the air / left stick |
+| Manual | Hold X at speed | Thumb pad down / left stick down |
 | Weight shift | Shift forward / X back | Thumb pad up/down / left stick up/down |
 | Respawn | R | Crash dialog; +3 seconds in a time trial |
-| Camera / pause / sound | C / P or Escape / M | On-screen buttons |
+| Camera (near, far, helmet) / pause / sound | C / P or Escape / M | On-screen buttons |
 
 Landscape orientation is recommended on a phone; portrait is supported. Actual speed and graphical fidelity depend on device/browser capabilities. There is no multiplayer server. Regions and lines have independent local best times and ghosts. V4 starts separate best-time, ghost and checkpoint-split records for every route and bike setup; older records remain in browser storage. Selection is shareable through `?region=uetliberg`, `?region=lenzerheide` and `?region=lenzerheide&line=technical`.
 
 Editable sources are also split into portable linked assemblies in [`blender/`](blender/README.md): terrain/trail, vegetation and props per region, with one shared weighted rider/bike. Open `blender/Uetliberg.blend` or `blender/Lenzerheide.blend`; keep that folder structure together.
+
+## V5: riding skill, light and presentation
+
+- **Pumping** (E / RB / touch PUMP): a fresh press compresses the bike for 0.4 s. Timed into a trough it gains speed; over a crest it costs speed; on an even slope it does nothing.
+- **Take-off timing**: preload with Space and release at the lip. A ring closes in while approaching a lip and turns green in the perfect window, which adds pop. Released on flat ground it stays a normal bunnyhop.
+- **Whip and scrub**: steering in the air throws the bike sideways; early in a rising arc it also scrubs (flatter and slightly faster). Land straight, or the landing is hard or a crash.
+- **Manual**: X (weight back) at speed lifts the front and rolls with less drag for up to 3.2 s.
+- **Flow rating** (0–100, grade C–S) rewards clean speed, pumps, manuals, good take-offs and landings and is reduced by braking into jumps, sliding, hard landings and crashes. The results screen lists what cost the most flow.
+- **Crash tumble**: rider and bike separate and tumble on the terrain before the respawn prompt.
+- **Camera**: closer, lower and wider with speed, ground-dependent shake, slight horizon lean; C cycles near, far and a new **helmet camera**.
+- **Light**: AgX tone mapping, low west side light at Uetliberg and crisp alpine light at Lenzerheide, cooler distance haze. Desktop and balanced add bloom, a per-region colour grade, vignette and radial speed blur from ~35 km/h (≈1 ms per frame on an Intel iGPU at 1024×768). Mobile renders without these passes.
+- **Ground and vegetation**: a darker, compacted centre line and lighter loose edges on the trail; gusts travelling through trees, grass and ferns; a dense, purely visual undergrowth belt 2.5–7 m beside every route.
+- **Audio**: freewheel ticking while coasting, leaf and grass rustle off the packed line, pump and take-off thumps. All still synthesised locally.
+
+The autopilot used by the golden-run test never pumps, jumps or manuals, so its times are unchanged and V4 best times remain comparable.
 
 ## V4: feel, camera, free exploration and performance
 
@@ -89,11 +107,14 @@ Requires Node.js 22+.
 npm ci
 npm run dev
 npm test
+npm run format:check
 node scripts/check_run.mjs
 npm run build
 node scripts/check_offline.mjs
 npm run preview
 ```
+
+Source layout: `src/core` (input, storage, settings, offline), `src/sim` (bike physics, collisions, setup), `src/render` (scene, camera, rider rig, vegetation), `src/gameplay` (course, ghost, race helpers), `src/ui` (HUD, minimap, panels) and `src/audio`. `tests/golden-runs.test.mjs` drives all nine route/preset combinations and fails if a run time drifts by more than 1 %; after a deliberate handling change refresh it with `node scripts/check_run.mjs --update-golden`. Legacy V1–V3 runtime models were removed from `public/`; rebuild scripts that need them restore them from Git history.
 
 Vite's base is `/downhill/`, matching the repository's GitHub Pages URL. `.github/workflows/pages.yml` tests, builds and publishes `dist/` on pushes to `main`. In repository Settings → Pages select **GitHub Actions** as the source. Only static game assets are published; Blender and source rasters are not loaded by the game.
 
