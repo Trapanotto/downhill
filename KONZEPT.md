@@ -182,6 +182,12 @@ Der vorhandene `FrameBudget` bleibt und wird um GPU-Timing (`timestamp-query` be
 
 ---
 
+## Umsetzungsstand (4. November 2026)
+
+- **Phase 0 erledigt:** `main.js` in Module aufgeteilt, Prettier, Golden-Run-Tests, 69 MB Alt-Assets entfernt.
+- **Phase 1 grösstenteils erledigt:** Post-FX-Kette (Bloom, Grading, Vignette, Speed-Blur, AgX), neues Licht und Dunst je Region, Trail-Verschleiss im Bodenmaterial, Wind mit Böen, Unterholz-Gürtel, neue Kamera, Pumpen, Absprung-Timing. **Offen:** WebGPU-Renderer, Ambient Occlusion, Cascaded Shadows, Feature-Kit in Blender (Strecken-Neubau), neue Props für Start/Ziel.
+- **Phase 2 grösstenteils erledigt:** Whip/Scrub, Manual, Sturz-Animation, Flow-Wert mit Auswertung, Helmkamera, erweitertes synthetisches Audio. **Offen:** gesampelte Audio-Aufnahmen (brauchen lizenzierte Quellen), echter Ragdoll mit Gelenken, Crash-Replay.
+
 ## 6. Roadmap
 
 Grundprinzip wie in großen Studios: **erst ein Vertical Slice in Endqualität**, dann skalieren. Lieber 400 m, die umwerfend aussehen und sich toll fahren, als 5 km, die okay sind.

@@ -1816,3 +1816,128 @@ dialog .setup-scale {
     display: none;
   }
 }
+
+/* V5: flow meter, take-off timing ring and trick callouts */
+#flow-meter {
+  position: absolute;
+  left: 40px;
+  bottom: 78px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 8px;
+  letter-spacing: 2px;
+}
+#flow-meter > i {
+  display: block;
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: #f2efdb33;
+  overflow: hidden;
+}
+#flow-fill {
+  display: block;
+  height: 100%;
+  width: 50%;
+  background: linear-gradient(90deg, #f39155, #ffd27a);
+  transition: width 0.25s;
+}
+#flow-grade {
+  font-style: normal;
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0;
+  min-width: 18px;
+}
+#pop-ring {
+  position: absolute;
+  left: 50%;
+  bottom: 24%;
+  width: 74px;
+  height: 74px;
+  margin-left: -37px;
+  border-radius: 50%;
+  border: 2px solid #f2efdb88;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+#pop-target {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 3px solid #f39155;
+  transform: scale(var(--t, 1.6));
+  opacity: var(--o, 0.4);
+}
+#pop-ring[data-ready='yes'] {
+  border-color: #b9f08a;
+}
+#pop-ring[data-ready='yes'] #pop-target {
+  border-color: #b9f08a;
+}
+#trick-callout {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translate(-50%, 0) scale(var(--pop, 1));
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 3px;
+  color: #ffe2a8;
+  text-shadow: 0 2px 14px #0009;
+  opacity: 0;
+  transition:
+    opacity 0.25s,
+    transform 0.25s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#trick-callout.show {
+  opacity: 1;
+  --pop: 1.08;
+}
+#trick-callout small {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 2px;
+  font-weight: 600;
+  opacity: 0.8;
+  text-align: center;
+}
+.touch-actions #touch-pump {
+  width: 64px;
+  height: 64px;
+}
+.touch-device #flow-meter {
+  left: 24px;
+  bottom: 200px;
+}
+.finish-flow {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 6px 0 4px;
+}
+.finish-flow b {
+  font-size: 44px;
+  font-weight: 800;
+  color: #ffd27a;
+}
+.finish-losses {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 14px;
+  font-size: 12px;
+  opacity: 0.85;
+}
+.finish-losses li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--line);
+  padding: 5px 0;
+}

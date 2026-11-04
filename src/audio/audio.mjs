@@ -3,13 +3,19 @@ import { clamp } from '../sim/physics.mjs';
 export function rideMix(bike, throttle = 0) {
   const speed = clamp(bike.speed / 24, 0, 1),
     ground = bike.air ? 0 : 1,
-    loose = bike.surface?.grip < 0.8 ? 1 : 0.45;
+    loose = bike.surface?.grip < 0.8 ? 1 : 0.45,
+    offTrail = !!bike.surface && bike.surface.name !== 'Trail';
   return {
     tyres: ground * speed * (0.06 + loose * 0.055),
     wind: speed * speed * 0.075,
     brake: ground * speed * (bike.brakePressure || 0) * (0.025 + Math.abs(bike.slip || 0) * 0.06),
     chain: ground * clamp(throttle, 0, 1) * Math.min(1, bike.speed / 3) * 0.016,
-    frequency: 160 + speed * 1100,
+    // Freewheel hub: ticks while coasting, rate follows wheel speed.
+    ratchet: (throttle < 0.05 ? 1 : 0) * clamp(bike.speed / 4, 0, 1) * 0.011,
+    ratchetRate: clamp(18 + bike.speed * 7, 18, 160),
+    // Leaves and meadow grass rustle under the tyres off the packed line.
+    rustle: ground * speed * (offTrail ? 0.06 : 0.008),
+    frequency: (offTrail ? 120 : 160) + speed * (offTrail ? 700 : 1100),
   };
 }
 export class RideAudio {
@@ -37,6 +43,7 @@ export class RideAudio {
       ['tyres', 'lowpass', 700],
       ['wind', 'lowpass', 220],
       ['brake', 'bandpass', 1900],
+      ['rustle', 'bandpass', 3200],
     ]) {
       const source = c.createBufferSource(),
         filter = c.createBiquadFilter(),
@@ -59,6 +66,18 @@ export class RideAudio {
     source.connect(gain).connect(this.master);
     source.start();
     this.channels.chain = { source, gain };
+    // Square-wave edges through a high-pass read as individual pawl clicks.
+    const ratchet = c.createOscillator(),
+      ratchetFilter = c.createBiquadFilter(),
+      ratchetGain = c.createGain();
+    ratchet.type = 'square';
+    ratchet.frequency.value = 40;
+    ratchetFilter.type = 'highpass';
+    ratchetFilter.frequency.value = 3800;
+    ratchetGain.gain.value = 0;
+    ratchet.connect(ratchetFilter).connect(ratchetGain).connect(this.master);
+    ratchet.start();
+    this.channels.ratchet = { source: ratchet, gain: ratchetGain };
   }
   resume() {
     this.ctx.resume().catch(() => {});
@@ -75,6 +94,7 @@ export class RideAudio {
     this.channels.tyres.filter.frequency.setTargetAtTime(mix.frequency, now, 0.08);
     this.channels.chain.source.frequency.setTargetAtTime(55 + bike.speed * 7, now, 0.08);
     this.channels.brake.filter.frequency.setTargetAtTime(1200 + bike.speed * 35, now, 0.08);
+    this.channels.ratchet.source.frequency.setTargetAtTime(mix.ratchetRate, now, 0.05);
   }
   impact(strength = 1, crash = false) {
     const c = this.ctx,

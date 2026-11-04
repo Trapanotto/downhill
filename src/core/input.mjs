@@ -11,6 +11,7 @@ export class InputController {
     this.touchWeight = 0;
     this.touchBrake = 0;
     this.touchJumpHeld = false;
+    this.touchPump = false;
     this.state = { steer: 0, throttle: false, brake: false, jump: false, sensitivity: 1 };
   }
 
@@ -23,6 +24,7 @@ export class InputController {
     this.touchWeight = 0;
     this.touchBrake = 0;
     this.touchJumpHeld = false;
+    this.touchPump = false;
   }
 
   clear() {
@@ -47,6 +49,7 @@ export class InputController {
     );
     input.jumpHeld = this.touchJumpHeld || keys.has('Space');
     input.jump = false;
+    input.pump = this.touchPump || keys.has('KeyE') ? 1 : 0;
     input.sensitivity = sensitivity;
     const pad = navigator.getGamepads?.()?.find(p => p?.connected);
     if (pad) {
@@ -56,6 +59,7 @@ export class InputController {
       input.throttle = Math.max(Number(input.throttle), pad.buttons[7]?.value || 0);
       input.brake = Math.max(input.brake, pad.buttons[6]?.value || 0);
       input.jumpHeld ||= !!pad.buttons[0]?.pressed;
+      input.pump = Math.max(input.pump, pad.buttons[5]?.value || 0);
     }
     return input;
   }
@@ -65,6 +69,7 @@ export class InputController {
     const steerPad = $('steer-pad'),
       brake = $('touch-brake'),
       jump = $('touch-jump'),
+      pump = $('touch-pump'),
       releaseEvents = ['pointerup', 'pointercancel', 'lostpointercapture'];
     let steerPointer = null,
       brakePointer = null,
@@ -118,5 +123,11 @@ export class InputController {
       jump.setPointerCapture(e.pointerId);
     });
     for (const event of releaseEvents) jump.addEventListener(event, () => (this.touchJumpHeld = false));
+
+    pump.addEventListener('pointerdown', e => {
+      this.touchPump = true;
+      pump.setPointerCapture(e.pointerId);
+    });
+    for (const event of releaseEvents) pump.addEventListener(event, () => (this.touchPump = false));
   }
 }

@@ -116,11 +116,17 @@
       </div>
       <div class="ride-bottom">
         <span id="ride-hint"
-          >W Treten · S Bremse · A/D Lenken · Space halten & loslassen · Shift/X Gewicht · R Neustart</span
+          >W Treten · S Bremse · A/D Lenken, in der Luft Whip · Space vorspannen, an der Kante loslassen · E
+          Pumpen · X Manual · R Neustart</span
         ><button id="camera">KAMERA <span>↻</span></button
         ><button id="sound-toggle" aria-label="Sound umschalten">TON AUS</button>
       </div>
       <div id="airtime" class="hidden">AIR TIME <b>0.0</b><span>s</span></div>
+      <div id="flow-meter" aria-label="Flow">
+        <span>FLOW</span><i><b id="flow-fill"></b></i><em id="flow-grade">B</em>
+      </div>
+      <div id="pop-ring" class="hidden" aria-hidden="true"><i id="pop-target"></i></div>
+      <div id="trick-callout" role="status"></div>
       <div id="toast" role="status"></div>
     </section>
     <canvas id="minimap" width="240" height="240" class="hidden" aria-label="Streckenkarte"></canvas>
@@ -130,7 +136,8 @@
         <i id="steer-knob"></i><span>LENKEN / GEWICHT</span>
       </div>
       <div class="touch-actions">
-        <button id="touch-jump" aria-label="Springen">↟<small>SPRUNG</small></button
+        <button id="touch-pump" aria-label="Pumpen">⤓<small>PUMP</small></button
+        ><button id="touch-jump" aria-label="Springen">↟<small>SPRUNG</small></button
         ><button id="touch-brake" aria-label="Bremsen gedrückt halten">◉<small>BREMSE</small></button>
       </div>
     </div>

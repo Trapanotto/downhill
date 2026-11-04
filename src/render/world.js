@@ -119,7 +119,16 @@ export async function loadWorldV2({
     vec3 groundColor=texture2D(floorColor,floorUv).rgb;
     vec3 pathColor=texture2D(trailColor,trailUv).rgb;
     vec3 localColor=mix(groundColor*.86,pathColor*vec3(.62,.51,.39),mask.r);
-    ${inset ? 'float lateral=(vTrack.x-.5)*12.0; float rut=exp(-pow((abs(lateral)-.55)/.19,2.0)); localColor*=1.0-.24*rut*mask.r;' : ''}
+    ${
+      inset
+        ? `float lateral=(vTrack.x-.5)*12.0; float rut=exp(-pow((abs(lateral)-.55)/.19,2.0)); localColor*=1.0-.24*rut*mask.r;
+    // Ridden-in centre line: darker and compacted; loose, lighter spoil where the edge berms up.
+    float packed=exp(-pow(lateral/1.05,2.0))*mask.r;
+    float loose=smoothstep(1.3,2.2,abs(lateral))*(1.0-smoothstep(2.6,3.6,abs(lateral)))*mask.r;
+    localColor*=mix(1.0,.8,packed);
+    localColor=mix(localColor,localColor*vec3(1.16,1.08,.96),loose*.65);`
+        : 'float packed=0.0;'
+    }
     diffuseColor.rgb=mix(diffuseColor.rgb,localColor,nearSurface);
    `
         )
@@ -127,7 +136,7 @@ export async function loadWorldV2({
           '#include <roughnessmap_fragment>',
           `#include <roughnessmap_fragment>
     vec3 packedSurface=mix(texture2D(floorARM,floorUv).rgb,texture2D(trailARM,trailUv).rgb,mask.r);
-    roughnessFactor=mix(.96,clamp(packedSurface.g,.6,1.0),nearSurface);
+    roughnessFactor=mix(.96,clamp(packedSurface.g,.6,1.0),nearSurface)*(1.0-.16*packed*nearSurface);
    `
         )
         .replace(
@@ -200,7 +209,11 @@ export async function loadWorldV2({
     geometry.applyMatrix4(o.matrixWorld);
     return geometry;
   };
-  function instances(model, capacity, { wind = false, grass = false, shadow = true, tree = false } = {}) {
+  function instances(
+    model,
+    capacity,
+    { wind = false, grass = false, fern = false, shadow = true, tree = false } = {}
+  ) {
     model.updateMatrixWorld(true);
     const batches = [];
     model.traverse(o => {
@@ -222,7 +235,7 @@ export async function loadWorldV2({
         mat.roughness = 0.95;
         mat.color.set('#8b9a4f');
       }
-      if (wind || grass)
+      if (wind || grass || fern)
         mat.onBeforeCompile = shader => {
           shader.uniforms.windTime = time;
           shader.vertexShader = shader.vertexShader
@@ -231,8 +244,12 @@ export async function loadWorldV2({
               '#include <begin_vertex>',
               `#include <begin_vertex>
     float phase=instanceMatrix[3].x*.12+instanceMatrix[3].z*.09;
-    float flex=${grass ? 'pow(clamp(position.y/.45,0.0,1.0),2.0)' : 'pow(clamp(position.y/14.0,0.0,1.0),2.0)'};
-    transformed.x+=sin(windTime*1.1+phase+position.y)*flex*${grass ? '.045' : '.075'};
+    // Gusts roll through the forest as a slow travelling wave on top of the base sway.
+    float gust=.55+.45*sin(windTime*.42-instanceMatrix[3].x*.018-instanceMatrix[3].z*.013);
+    float flex=${grass ? 'pow(clamp(position.y/.45,0.0,1.0),2.0)' : fern ? 'pow(clamp(position.y/.9,0.0,1.0),1.5)' : 'pow(clamp(position.y/14.0,0.0,1.0),2.0)'};
+    float sway=sin(windTime*${grass || fern ? '1.9' : '1.1'}+phase+position.y)*.7+sin(windTime*3.7+phase*1.7)*.3;
+    transformed.x+=sway*flex*gust*${grass ? '.07' : fern ? '.06' : '.12'};
+    transformed.z+=cos(windTime*.9+phase)*flex*gust*${grass ? '.03' : fern ? '.03' : '.05'};
    `
             );
         };
@@ -332,7 +349,7 @@ gl_Position=projectionMatrix*mvPosition;`
     },
     {
       data: decor.ferns,
-      batches: instances(fern.scene, profile.fernCount, { wind: false, shadow: profile.tree === 'high' }),
+      batches: instances(fern.scene, profile.fernCount, { fern: true, shadow: profile.tree === 'high' }),
       max: profile.fernCount,
       radius: profile.detailRadius * 0.85,
     },

@@ -219,6 +219,19 @@ export class BikePhysics {
       previousZ: this.z,
       crashReason: '',
       atBoundary: false,
+      pumpStroke: 0,
+      pumpGain: 0,
+      pumpSerial: 0,
+      _pumpHeld: false,
+      lipAhead: 0,
+      lastPop: '',
+      popSerial: 0,
+      manual: 0,
+      manualTime: 0,
+      _manualLock: false,
+      whip: 0,
+      scrub: 0,
+      styleMax: 0,
     });
     this.surface = this.terrain.surfaceAt?.(this.x, this.z) || { name: 'Trail', grip: 1, resistance: 0.09 };
     this._groundHeight =
@@ -262,8 +275,17 @@ export class BikePhysics {
           ? (8 * amount(input.throttle)) / (1 + this.speed * 0.05)
           : 0;
     const gravity = (-9.81 * slope) / Math.sqrt(1 + slope * slope);
+    // Manual: weight fully back at speed lifts the front and rolls with less drag, for up to 3.2 s.
+    const manualWanted =
+      !this.air && this.weight < -0.7 && this.speed > 3 && frontBrake + rearBrake < 0.05 && !this._manualLock;
+    this.manual = approach(this.manual, manualWanted ? 1 : 0, manualWanted ? 6 : 9, dt);
+    if (this.manual > 0.5) this.manualTime += dt;
+    else if (!manualWanted) this.manualTime = 0;
+    if (this.manualTime > 3.2) this._manualLock = true;
+    if (this.weight > -0.4) this._manualLock = false;
     const resistance =
-      (this.surface.resistance + this.tune.rolling - 0.09) * this.speed + 0.006 * this.speed * this.speed;
+      (this.surface.resistance + this.tune.rolling - 0.09) * this.speed * (1 - this.manual * 0.45) +
+      0.006 * this.speed * this.speed;
     this.frontLoad = clamp(0.52 + frontBrake * 0.15 + this.weight * 0.13 - slope * 0.04, 0.28, 0.8);
     this.brakePressure = Math.max(frontBrake, rearBrake);
     const traction = (13.5 * this.surface.grip * this.tune.grip) / Math.sqrt(1 + slope * slope);
@@ -276,6 +298,31 @@ export class BikePhysics {
       0,
       27
     );
+    // Terrain shape ahead drives pumping and the take-off timing window.
+    const slopeAt = distance => {
+      const g = this.terrain.gradient(this.x + fx * distance, this.z + fz * distance);
+      return g.x * fx + g.z * fz;
+    };
+    const slopeAhead = slopeAt(2.5),
+      curvature = (slopeAhead - slope) / 2.5;
+    this.lipAhead =
+      !this.air && this.speed > 6 ? clamp((slope - slopeAt(3.2) - 0.18) / 0.3, 0, 1) * (slope > -0.05) : 0;
+    // Pump: a fresh press compresses the bike for 0.4 s. Pressing into a trough gains speed,
+    // pressing over a crest bleeds it; on an even slope it does nothing.
+    const pumpHeld = amount(input.pump) > 0.5;
+    if (pumpHeld && !this._pumpHeld && !this.air) {
+      this.pumpStroke = 1;
+      this.pumpSerial++;
+    }
+    this._pumpHeld = pumpHeld;
+    this.pumpGain = 0;
+    if (this.pumpStroke > 0) {
+      if (!this.air && this.speed > 2) {
+        this.pumpGain = this.pumpStroke * (6.5 * (clamp(curvature * 6, 0, 1) - clamp(-curvature * 6, 0, 1)));
+        this.speed = clamp(this.speed + this.pumpGain * dt, 0, 27);
+      }
+      this.pumpStroke = Math.max(0, this.pumpStroke - dt / 0.4);
+    }
     // Steering response softens at speed; tyre grip controls how quickly momentum follows.
     const t = this.terrain,
       nearEdge =
@@ -305,8 +352,13 @@ export class BikePhysics {
     if (held && !this.air) this.jumpCharge = clamp(this.jumpCharge + dt / 0.72, 0, 1);
     const release = this._jumpHeld && !held;
     if ((release || input.jump) && !this.air && this.speed > 1 && this.jumpCooldown <= 0) {
-      const charge = release ? this.jumpCharge : 0.5;
-      this.vy = 3.1 + charge * 2.5 + this.speed * 0.025;
+      const charge = release ? this.jumpCharge : 0.5,
+        timing = release ? this.lipAhead : 0;
+      // Releasing the preload right at a lip adds pop; on flat ground it is a plain bunnyhop.
+      this.lastPop = !release ? '' : timing > 0.6 ? 'perfect' : timing > 0.2 ? 'good' : 'flat';
+      if (release) this.popSerial++;
+      this.vy =
+        3.1 + charge * 2.5 + this.speed * 0.025 + charge * (timing > 0.6 ? 1.6 : timing > 0.2 ? 0.8 : 0);
       this.air = true;
       this.airtime = 0;
       this.jumpCooldown = 0.65;
@@ -333,6 +385,17 @@ export class BikePhysics {
     this.maxSpeed = Math.max(this.maxSpeed, this.speed * 3.6);
     const groundPitch = Math.atan2(front - rear, 1.44);
     let landing = 0;
+    // Whip: steering in the air throws the bike sideways. Early in a rising arc it also scrubs:
+    // a flatter, faster trajectory. The bike must be straight again before touchdown.
+    const airSteer = this.air ? clamp(input.steer || 0, -1, 1) : 0;
+    this.whip = approach(this.whip, airSteer * 0.9, this.air ? 5 : 12, dt);
+    this.scrub = 0;
+    if (this.air && this.airtime < 0.3 && this.vy > 0 && Math.abs(airSteer) > 0.5) {
+      this.scrub = Math.abs(airSteer);
+      this.vy -= 6 * this.scrub * dt;
+      this.speed = clamp(this.speed + 0.8 * this.scrub * dt, 0, 27);
+    }
+    if (this.air) this.styleMax = Math.max(this.styleMax, Math.abs(this.whip));
     if (this.air) {
       this.vy -= 9.81 * dt;
       this.y += this.vy * dt;
@@ -342,12 +405,18 @@ export class BikePhysics {
         this.landingImpact = landing;
         this.landingSerial++;
         const alignment = Math.abs(this.pitch - groundPitch),
+          crossed = Math.abs(this.whip),
           absorption = this.tune.absorption + Math.max(0, -this.weight) * 0.25;
-        this.landingQuality = landing < 8 && alignment < 0.45 ? 'smooth' : 'hard';
-        if (landing / absorption > 23 || (alignment > 0.95 && landing > 11)) {
+        this.landingWhip = this.styleMax;
+        this.lastAirtime = this.airtime;
+        this.landingQuality = landing < 8 && alignment < 0.45 && crossed < 0.3 ? 'smooth' : 'hard';
+        if (crossed > 0.3) this.speed *= 1 - clamp((crossed - 0.3) * 0.25, 0, 0.12);
+        if (landing / absorption > 23 || (alignment > 0.95 && landing > 11) || crossed > 0.72) {
           this.crashed = true;
+          this.crashReason = crossed > 0.72 ? 'whip' : 'landing';
           this.landingQuality = 'crash';
         }
+        this.styleMax = 0;
         this.y = ground + 0.03;
         this.vy = 0;
         this.air = false;
@@ -376,16 +445,20 @@ export class BikePhysics {
       frontBrake * 0.065 +
       Math.max(0, this.weight) * 0.025 +
       this.jumpCharge * 0.1 +
-      Math.max(0, verticalAcceleration) * 0.0018;
+      Math.max(0, verticalAcceleration) * 0.0018 +
+      this.pumpStroke * 0.08;
     const rearTarget =
       0.025 +
       Math.max(0, acceleration) * 0.003 +
       Math.max(0, -this.weight) * 0.025 +
       this.jumpCharge * 0.1 +
-      Math.max(0, verticalAcceleration) * 0.0015;
-    this.spring('front', this.air ? 0.009 : frontTarget, dt);
+      Math.max(0, verticalAcceleration) * 0.0015 +
+      this.pumpStroke * 0.08;
+    this.spring('front', this.air || this.manual > 0.5 ? 0.009 : frontTarget, dt);
     this.spring('rear', this.air ? 0.009 : rearTarget, dt);
-    const targetPitch = this.air ? clamp(this.vy / 24 - this.weight * 0.25, -0.6, 0.6) : groundPitch;
+    const targetPitch = this.air
+      ? clamp(this.vy / 24 - this.weight * 0.25, -0.6, 0.6)
+      : groundPitch + this.manual * 0.3;
     this.pitch = approach(this.pitch, targetPitch, this.air ? 3.5 : 15, dt);
     this.landingImpact = approach(this.landingImpact, 0, 5, dt);
     if (!this.terrain.contains(this.x, this.z)) {

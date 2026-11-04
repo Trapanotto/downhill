@@ -15,16 +15,20 @@ import { HeightField, BikePhysics, TrailTracker, surfaceDetails, formatTime } fr
 import { ObstacleWorld } from './sim/collisions.mjs';
 import { normalizeSetup, SETUP_PRESETS, setupLabel, setupSignature } from './sim/setup.mjs';
 import { createRenderer, createScene } from './render/scene.mjs';
+import { PostFX } from './render/postfx.mjs';
 import { createContactShadow, DustParticles } from './render/effects.mjs';
-import { RideCamera } from './render/camera.mjs';
+import { RideCamera, CAMERA_MODES } from './render/camera.mjs';
+import { CrashTumble } from './render/ragdoll.mjs';
 import { RiderAnimator } from './render/rider.mjs';
 import { SkidMarks, RideFeedback } from './render/feedback.mjs';
 import { finishBikeAndRider } from './render/visuals.mjs';
 import { loadWorldV2 } from './render/world.js';
+import { trailsideDecor } from './render/undergrowth.mjs';
 import { buildCourse, Waypoint } from './gameplay/course.mjs';
 import { GhostRider, ghostFrame } from './gameplay/ghost.mjs';
+import { FlowMeter } from './gameplay/flow.mjs';
 import { RideAudio } from './audio/audio.mjs';
-import { updateHud, updateNavigation, showSplit } from './ui/hud.mjs';
+import { updateHud, updateNavigation, showSplit, updateRideAids, callout } from './ui/hud.mjs';
 import { Minimap } from './ui/minimap.mjs';
 import * as panels from './ui/panels.mjs';
 
@@ -59,10 +63,11 @@ let bikeSetup = normalizeSetup(storage.get('bike-setup', {})),
 // World and rig
 let renderer, baseDpr, scene, camera, sun, region, trail, terrain, bike, tracker, collisions, worldV2;
 let player, rider, riderAnimator, frontWheel, rearWheel, frontFork, shadow;
-let dust, skidMarks, waypoint, ghost, minimap, audio;
+let dust, skidMarks, waypoint, ghost, minimap, audio, postfx, tumble;
 const input = new InputController(),
   rideView = new RideCamera(),
   feedback = new RideFeedback(),
+  flow = new FlowMeter(),
   frameBudget = new FrameBudget(),
   heroTarget = new THREE.Vector3(),
   heroLook = new THREE.Vector3();
@@ -71,7 +76,9 @@ const input = new InputController(),
 let state = 'loading',
   mode = 'race',
   ready = false,
-  cameraFar = false,
+  cameraMode = CAMERA_MODES.includes(storage.get('camera-mode', 'near'))
+    ? storage.get('camera-mode', 'near')
+    : 'near',
   crashShown = false;
 let elapsed = 0,
   accumulator = 0,
@@ -80,7 +87,12 @@ let elapsed = 0,
   rigAccumulator = 0,
   nearestIndex = 0,
   nearDistance = 0;
-let runAir = 0,
+let lastLandingSerial = 0,
+  lastPopSerial = 0,
+  lastPumpSerial = 0,
+  lastPumpCallout = -10,
+  crashTimeout,
+  runAir = 0,
   totalAir = 0,
   crashes = 0,
   ghostRecord = [],
@@ -142,6 +154,8 @@ function chooseMode(next) {
 
 function showMenu() {
   state = 'menu';
+  clearTimeout(crashTimeout);
+  tumble?.stop();
   show('performance-hud', false);
   input.clearKeys();
   show('menu', true);
@@ -302,6 +316,15 @@ function exposeDebugHandle() {
     get profile() {
       return profile;
     },
+    get scene() {
+      return scene;
+    },
+    get postfx() {
+      return postfx;
+    },
+    get sun() {
+      return sun;
+    },
     start: startRun,
     respawn,
     showMenu,
@@ -312,6 +335,7 @@ async function init() {
   try {
     ({ renderer, baseDpr } = createRenderer($('world'), { touch, quality, profile }));
     ({ scene, camera, sun } = createScene(renderer, selected.id, profile));
+    postfx = new PostFX(renderer, scene, camera, { tier: quality, region: selected.id });
     setLoading(0.08, 'DIE LANDSCHAFT LÄDT.');
     const manager = new THREE.LoadingManager();
     manager.onProgress = (_, done, total) => setLoading(0.12 + 0.76 * (done / total));
@@ -347,6 +371,12 @@ async function init() {
     scene.add(data.terrainModel.scene);
 
     setLoading(0.55, 'DER WALD WIRD BEREIT.');
+    const trailside = trailsideDecor(trail, terrain, { alpine: region.biome === 'alpine' }),
+      visualDecor = {
+        ...data.decor,
+        grass: [...data.decor.grass, ...trailside.grass],
+        ferns: [...data.decor.ferns, ...trailside.ferns],
+      };
     worldV2 = await loadWorldV2({
       scene,
       renderer,
@@ -355,7 +385,7 @@ async function init() {
       asset,
       meta: region,
       forest: data.forest,
-      decor: data.decor,
+      decor: visualDecor,
       profile,
       baseTerrain: data.terrainModel.scene,
     });
@@ -369,6 +399,7 @@ async function init() {
     dust = new DustParticles(scene);
     ghost.load(ghostSaved);
     skidMarks = new SkidMarks(scene, terrain, touch ? 100 : 220);
+    tumble = new CrashTumble(scene, terrain);
 
     $('route-length').textContent = (Math.round(trail.length / 10) / 100).toFixed(2);
     $('route-drop').textContent = trail.drop;
@@ -378,7 +409,7 @@ async function init() {
     heroCamera(0, true);
     worldV2.update(camera, bike, 0, true);
     renderer.compile(scene, camera);
-    renderer.render(scene, camera);
+    postfx.render();
     await new Promise(r => requestAnimationFrame(r));
     ready = true;
     $('bike-setup-label').textContent = setupLabel(bikeSetup);
@@ -411,6 +442,10 @@ function syncPlayer(dt = 0, throttle = 0) {
   player.rotation.set(0, bike.yaw, 0);
   player.rotateX(bike.pitch + (bike.rearCompression - bike.frontCompression) * 0.5);
   player.rotateZ(bike.lean);
+  // Whip: the bike is thrown sideways under the rider in the air.
+  player.rotateY(bike.whip * 0.9);
+  player.rotateZ(bike.whip * 0.3);
+  if (rider) rider.visible = cameraMode !== 'helmet' || state === 'menu';
   if (frontWheel) {
     frontWheel.position.y = 0.42 + heave;
     rearWheel.position.y = 0.42 + heave;
@@ -431,7 +466,7 @@ function syncPlayer(dt = 0, throttle = 0) {
     shadow.rotation.z = -bike.yaw;
     shadow.material.opacity = Math.max(0, 0.45 - (bike.y - ground) * 0.12);
   }
-  sun.position.set(bike.x - 110, bike.y + 170, bike.z + 70);
+  sun.position.set(bike.x, bike.y, bike.z).add(sun.userData.offset);
   sun.target.position.set(bike.x, bike.y, bike.z);
   sun.target.updateMatrixWorld();
 }
@@ -449,7 +484,7 @@ function heroCamera(dt, instant = false) {
 }
 
 function rideCamera(dt, instant = false) {
-  rideView.update(camera, bike, trail, nearestIndex, terrain, collisions, dt, cameraFar, instant);
+  rideView.update(camera, bike, trail, nearestIndex, terrain, collisions, dt, cameraMode, instant);
 }
 
 function refreshHud() {
@@ -498,6 +533,11 @@ function startRun() {
   riderAnimator.phase = 0;
   skidMarks?.reset();
   feedback.reset();
+  flow.reset();
+  tumble?.stop();
+  lastLandingSerial = 0;
+  lastPopSerial = 0;
+  lastPumpSerial = 0;
   show('performance-hud', showPerformance);
   show('split-feedback', false);
   lastGhostT = -1;
@@ -550,7 +590,12 @@ function countdown(n) {
 }
 
 function respawn() {
+  clearTimeout(crashTimeout);
+  tumble.stop();
   bike.reset(tracker.respawnIndex);
+  lastLandingSerial = 0;
+  lastPopSerial = 0;
+  lastPumpSerial = 0;
   feedback.reset();
   skidMarks.previous = null;
   tracker.nearest = tracker.respawnIndex;
@@ -575,8 +620,16 @@ function crash() {
   state = 'crashed';
   input.clearKeys();
   show('hop-charge', false);
+  show('pop-ring', false);
   show('touch', false);
-  show('crash', true);
+  flow.crash();
+  rider.visible = true;
+  tumble.start(player, rider, bike);
+  // Let the tumble play before the respawn prompt appears.
+  clearTimeout(crashTimeout);
+  crashTimeout = setTimeout(() => {
+    if (state === 'crashed') show('crash', true);
+  }, 1100);
   if (audio) {
     audio.mute();
     if (soundEnabled) audio.impact(10, true);
@@ -634,6 +687,9 @@ function finish() {
       isBest,
       medal,
       maxSpeed: bike.maxSpeed,
+      flowScore: flow.score(),
+      flowGrade: flow.grade(),
+      flowLosses: flow.losses(),
       totalAir,
       crashes,
     }),
@@ -685,6 +741,50 @@ function toggleSound() {
 // ---------------------------------------------------------------------------
 // Main loop
 
+/** Flow scoring and trick callouts from this frame's bike state. */
+function rideEvents(dt) {
+  flow.update(bike, dt);
+  if (bike.landingSerial !== lastLandingSerial) {
+    lastLandingSerial = bike.landingSerial;
+    const airtime = bike.lastAirtime || 0;
+    flow.landing({ quality: bike.landingQuality, airtime, whip: bike.landingWhip || 0 });
+    if (bike.landingQuality === 'smooth' && bike.landingWhip > 0.4)
+      callout('WHIP', airtime.toFixed(1) + ' s');
+    else if (bike.landingQuality === 'smooth' && airtime > 0.45)
+      callout('SAUBER', airtime.toFixed(1) + ' s AIR');
+    else if (bike.landingQuality === 'hard') callout('HART GELANDET');
+  }
+  if (bike.pumpSerial !== lastPumpSerial) {
+    lastPumpSerial = bike.pumpSerial;
+    if (soundEnabled) audio?.impact(1.2);
+  }
+  if (bike.popSerial !== lastPopSerial) {
+    lastPopSerial = bike.popSerial;
+    if (soundEnabled) audio?.impact(2.5);
+    flow.pop(bike.lastPop);
+    if (bike.lastPop === 'perfect') callout('PERFEKTER ABSPRUNG');
+    else if (bike.lastPop === 'good') callout('GUTER ABSPRUNG');
+  }
+  if (bike.pumpGain > 2 && elapsed - lastPumpCallout > 1.5) {
+    lastPumpCallout = elapsed;
+    callout('PUMP', '+' + (bike.pumpGain * 0.4 * 3.6).toFixed(1) + ' km/h', 700);
+  }
+  if (bike.manual > 0.5 && bike.manualTime > 0.6) callout('MANUAL', bike.manualTime.toFixed(1) + ' s', 400);
+  if (bike.scrub > 0.5 && bike.airtime < 0.12) callout('SCRUB', '', 700);
+  updateRideAids({ bike, flow });
+}
+
+function crashCamera(dt) {
+  if (!tumble.active) return;
+  tumble.update(dt);
+  heroLook.copy(tumble.focus);
+  const behind = heroTarget.copy(camera.position).sub(heroLook).setY(0).normalize().multiplyScalar(5.5);
+  behind.add(heroLook);
+  behind.y = Math.max(heroLook.y + 2, terrain.sample(behind.x, behind.z) + 1.2);
+  camera.position.lerp(behind, 1 - Math.exp(-dt * 2.5));
+  camera.lookAt(heroLook);
+}
+
 function stepRide(dt) {
   const controls = input.read(bike, { autoPedal, sensitivity });
   accumulator += dt;
@@ -711,9 +811,9 @@ function stepRide(dt) {
   if (bike.air) runAir = bike.airtime;
   else if (runAir) {
     totalAir += runAir;
-    if (runAir > 0.45 && bike.landingQuality === 'smooth') toast('SAUBERE LANDUNG · FLOW');
     runAir = 0;
   }
+  if (state === 'riding') rideEvents(dt);
   if (bike.atBoundary && frameCount % 180 === 0) toast('GEBIETSGRENZE · WENDE DEIN BIKE');
   if (state === 'riding' && elapsed - lastGhostT > 0.1) recordGhost();
   if (mode === 'race') ghost.update(elapsed);
@@ -756,6 +856,7 @@ function applyFrameBudget(rawDt) {
   if (measured.change) {
     renderer.setPixelRatio(Math.max(0.7, baseDpr * Math.pow(0.84, measured.level)));
     renderer.setSize(innerWidth, innerHeight);
+    postfx.resize();
     worldV2.setBudget(measured.level);
   }
   storage.set('performance.' + selected.id + '.' + quality, {
@@ -784,11 +885,12 @@ function animate(now) {
   if (state === 'riding') stepRide(dt);
   else if (state === 'menu') heroCamera(dt);
   else if (state === 'countdown') rideCamera(dt);
+  else if (state === 'crashed') crashCamera(dt);
   worldV2?.update(camera, bike, now / 1000);
   dust.update(dt, bike, state === 'riding');
   audio?.update(bike, state === 'riding' && soundEnabled, Number(input.state.throttle));
   renderer.shadowMap.needsUpdate = frameCount % (touch || frameBudget.level > 1 ? 2 : 1) === 0;
-  renderer.render(scene, camera);
+  postfx.render(bike.speed, state === 'riding');
   frameCount++;
   frameTotal += dt;
   if (frameCount % 60 === 0) {
@@ -905,8 +1007,9 @@ function bindUi() {
   $('mode-free').onclick = () => chooseMode('free');
   $('pause').onclick = pause;
   $('camera').onclick = () => {
-    cameraFar = !cameraFar;
-    toast(cameraFar ? 'KAMERA · WEIT' : 'KAMERA · NAH');
+    cameraMode = CAMERA_MODES[(CAMERA_MODES.indexOf(cameraMode) + 1) % CAMERA_MODES.length];
+    storage.set('camera-mode', cameraMode);
+    toast({ near: 'KAMERA · NAH', far: 'KAMERA · WEIT', helmet: 'KAMERA · HELM' }[cameraMode]);
   };
   $('sound-toggle').onclick = toggleSound;
   setSoundLabel();
@@ -938,6 +1041,7 @@ function bindUi() {
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(innerWidth, innerHeight);
+    postfx.resize();
   });
   input.bindTouchControls();
 }

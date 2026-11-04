@@ -47,3 +47,27 @@ export function showSplit(elapsed, reference) {
   clearTimeout(splitTimeout);
   splitTimeout = setTimeout(() => show('split-feedback', false), 4200);
 }
+
+/** Flow bar and the take-off timing ring shown while preloading towards a lip. */
+export function updateRideAids({ bike, flow }) {
+  $('flow-fill').style.width = flow.value.toFixed(1) + '%';
+  $('flow-grade').textContent = flow.grade();
+  const ring = $('pop-ring'),
+    preloading = !bike.air && bike.jumpCharge > 0.08 && bike.lipAhead > 0.02;
+  show('pop-ring', preloading);
+  if (preloading) {
+    // The target ring closes in as the lip approaches; release when it turns green.
+    $('pop-target').style.setProperty('--t', (1.6 - bike.lipAhead * 0.6).toFixed(3));
+    $('pop-target').style.setProperty('--o', (0.4 + bike.lipAhead * 0.6).toFixed(3));
+    ring.dataset.ready = bike.lipAhead > 0.6 ? 'yes' : 'no';
+  }
+}
+
+let calloutTimeout;
+export function callout(text, detail = '', duration = 1100) {
+  const el = $('trick-callout');
+  el.innerHTML = text + (detail ? `<small>${detail}</small>` : '');
+  el.classList.add('show');
+  clearTimeout(calloutTimeout);
+  calloutTimeout = setTimeout(() => el.classList.remove('show'), duration);
+}

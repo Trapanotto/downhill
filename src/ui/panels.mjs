@@ -38,15 +38,18 @@ export function controlsHtml(touch) {
     ['W / ↑', 'Treten'],
     ['S / ↓', 'Bremsen'],
     ['A D / ← →', 'Lenken'],
-    ['Leertaste', 'Halten: vorspannen · loslassen: springen'],
+    ['Leertaste', 'Halten: vorspannen · an der Kante loslassen: Absprung (Ring wird grün)'],
+    ['E', 'Pumpen: in Senken drücken bringt Tempo, auf Kuppen kostet es'],
+    ['A D in der Luft', 'Whip · früh im Sprung: Scrub (flacher, schneller). Gerade landen!'],
+    ['X halten', 'Gewicht zurück · bei Tempo: Manual (max. 3 s, weniger Rollwiderstand)'],
     ['R', 'Zum Checkpoint (+3 s)'],
-    ['Shift / X', 'Gewicht vor / zurück'],
+    ['Shift', 'Gewicht vor'],
     ['V', 'Hinterradbremse'],
-    ['C / P / M', 'Kamera / Pause / Sound'],
+    ['C / P / M', 'Kamera (nah · weit · Helm) / Pause / Sound'],
   ];
   return `<span class="micro">DEIN BIKE. DEINE KONTROLLE.</span><h2>Finde deinen Flow.</h2>
 <div class="controls">${keys.map(([k, v]) => `<p><b>${k}</b>${v}</p>`).join('')}</div>
-<p>Gamepad: linker Stick lenkt und verlagert das Gewicht, RT tritt, LT bremst dosiert. A halten und loslassen: springen. Auf dem Smartphone: links lenken; den Daumen vor/zurück bewegen für Gewichtsverlagerung. Rechts bremsen, für mehr Bremskraft nach oben ziehen. Sprung halten und loslassen. Autopedal lässt sich in den Optionen einstellen.</p>
+<p>Gamepad: linker Stick lenkt und verlagert das Gewicht, RT tritt, LT bremst dosiert, RB pumpt. A halten und loslassen: springen. Auf dem Smartphone: links lenken; den Daumen vor/zurück bewegen für Gewichtsverlagerung. Rechts bremsen, für mehr Bremskraft nach oben ziehen. Sprung halten und loslassen, PUMP in Senken tippen. Autopedal lässt sich in den Optionen einstellen.</p>
 <p>Du kannst die markierte Linie verlassen und das ganze vorbereitete Gebiet frei befahren. R setzt dich nur auf deinen Befehl zurück. Im Zeitfahren müssen die Checkpoints der Reihe nach passiert werden. Deine Bestzeit und dein Geist bleiben auf diesem Gerät gespeichert.</p>${
     touch
       ? '<span class="portrait-tip">Tipp: Drehe dein Smartphone ins Querformat für mehr Sicht auf die Strecke.</span>'
@@ -116,10 +119,28 @@ export function pauseHtml() {
   )}${cta('restart', 'RUN NEU STARTEN')}${cta('exit-run', 'ZUM HAUPTMENÜ')}`;
 }
 
-export function finishHtml({ title, elapsed, race, isBest, medal, maxSpeed, totalAir, crashes }) {
+export function finishHtml({
+  title,
+  elapsed,
+  race,
+  isBest,
+  medal,
+  maxSpeed,
+  totalAir,
+  crashes,
+  flowScore = 0,
+  flowGrade = 'C',
+  flowLosses = [],
+}) {
   const badge = race ? (isBest ? 'NEUE BESTZEIT · ' : '') + medal : 'FREIE FAHRT';
+  const losses = flowLosses
+    .slice(0, 3)
+    .map(l => `<li><span>${l.label}</span><b>${l.count ? l.count + '×' : l.seconds + ' s'}</b></li>`)
+    .join('');
   return `<span class="micro">${title.toUpperCase()} / GESCHAFFT</span><h2>Unten angekommen.</h2>
 <div class="finish-time">${formatTime(elapsed)}</div><span class="medal">${badge}</span>
+<div class="finish-flow"><b>${flowGrade}</b><span>FLOW ${flowScore} / 100</span></div>
+${losses ? `<span class="micro">WAS FLOW GEKOSTET HAT</span><ul class="finish-losses">${losses}</ul>` : ''}
 <div class="finish-stats"><div><b>${Math.round(maxSpeed)}</b><span>KM/H MAX</span></div><div><b>${totalAir.toFixed(1)} s</b><span>AIR TIME</span></div><div><b>${crashes}</b><span>NEUSTARTS</span></div></div>
 ${cta('again', 'NOCH EINE ABFAHRT', true)}${cta('back-menu', 'ZUM HAUPTMENÜ')}`;
 }
