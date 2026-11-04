@@ -4,11 +4,11 @@ import fs from 'node:fs';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { ObstacleWorld } from '../src/collisions.mjs';
-import { ReplayTrack, minimapTransform, routeLookAhead } from '../src/race.mjs';
-import { RiderAnimator, solveLimb } from '../src/rider.mjs';
-import { RideCamera } from '../src/camera.mjs';
-import { BikePhysics } from '../src/physics.mjs';
+import { ObstacleWorld } from '../src/sim/collisions.mjs';
+import { ReplayTrack, minimapTransform, routeLookAhead } from '../src/gameplay/race.mjs';
+import { RiderAnimator, solveLimb } from '../src/render/rider.mjs';
+import { RideCamera } from '../src/render/camera.mjs';
+import { BikePhysics } from '../src/sim/physics.mjs';
 const flat = { sample: () => 0, gradient: () => ({ x: 0, z: 0 }), contains: () => true },
   trail = {
     points: [

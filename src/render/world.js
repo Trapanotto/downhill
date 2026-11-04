@@ -1,4 +1,4 @@
-import { PlacementIndex } from './performance.mjs';
+import { PlacementIndex } from '../core/performance.mjs';
 import * as THREE from 'three';
 
 /** All geometry, instance positions and photographic maps are loaded up front. */

@@ -89,11 +89,14 @@ Requires Node.js 22+.
 npm ci
 npm run dev
 npm test
+npm run format:check
 node scripts/check_run.mjs
 npm run build
 node scripts/check_offline.mjs
 npm run preview
 ```
+
+Source layout: `src/core` (input, storage, settings, offline), `src/sim` (bike physics, collisions, setup), `src/render` (scene, camera, rider rig, vegetation), `src/gameplay` (course, ghost, race helpers), `src/ui` (HUD, minimap, panels) and `src/audio`. `tests/golden-runs.test.mjs` drives all nine route/preset combinations and fails if a run time drifts by more than 1 %; after a deliberate handling change refresh it with `node scripts/check_run.mjs --update-golden`. Legacy V1–V3 runtime models were removed from `public/`; rebuild scripts that need them restore them from Git history.
 
 Vite's base is `/downhill/`, matching the repository's GitHub Pages URL. `.github/workflows/pages.yml` tests, builds and publishes `dist/` on pushes to `main`. In repository Settings → Pages select **GitHub Actions** as the source. Only static game assets are published; Blender and source rasters are not loaded by the game.
 

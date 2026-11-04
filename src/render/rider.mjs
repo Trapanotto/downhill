@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp } from './physics.mjs';
+import { clamp } from '../sim/physics.mjs';
 const UP = new THREE.Vector3(0, 1, 0);
 /** Analytical two-bone IK, with an explicit elbow/knee bend direction. */
 export function solveLimb(start, target, pole, l1, l2) {

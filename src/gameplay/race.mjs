@@ -1,4 +1,4 @@
-import { clamp, wrapAngle } from './physics.mjs';
+import { clamp, wrapAngle } from '../sim/physics.mjs';
 /** Time-based replay interpolation and progress-based comparison, independent of FPS. */
 export class ReplayTrack {
   constructor(samples = []) {

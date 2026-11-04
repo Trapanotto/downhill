@@ -1,4 +1,4 @@
-import { clamp } from './physics.mjs';
+import { clamp } from '../sim/physics.mjs';
 /** Independent tyre, wind, brake and drivetrain layers; all synthesis stays local. */
 export function rideMix(bike, throttle = 0) {
   const speed = clamp(bike.speed / 24, 0, 1),

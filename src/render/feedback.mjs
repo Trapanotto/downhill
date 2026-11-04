@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { clamp } from './physics.mjs';
+import { clamp } from '../sim/physics.mjs';
 /** A fixed-size decal ring: skid marks have bounded GPU and memory cost. */
 export class SkidMarks {
   constructor(scene, terrain, capacity = 180) {

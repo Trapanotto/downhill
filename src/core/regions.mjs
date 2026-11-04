@@ -1,4 +1,4 @@
-import { setupSignature } from './setup.mjs';
+import { setupSignature } from '../sim/setup.mjs';
 /** Explicit local asset routing. Geodata is never queried from the game. */
 export const REGIONS = Object.freeze({
   uetliberg: {
@@ -40,10 +40,6 @@ const localFiles = new Set([
   'sources.json',
   'art-sources.json',
   'surface-mask.png',
-  'corridor.glb',
-  'terrain-high.glb',
-  'terrain-mobile.glb',
-  'panorama.glb',
   'panorama-v4.glb',
   'landmark.glb',
   'ortho-4k.webp',
@@ -51,15 +47,8 @@ const localFiles = new Set([
   'floor-color.webp',
   'floor-normal.webp',
   'floor-arm.webp',
-  'tree-v2-high.glb',
-  'tree-v2-mobile.glb',
-  'tree-impostor.webp',
   'surface-details.json',
   'surface-details.bin',
-  'corridor-v3-high.glb',
-  'corridor-v3-mobile.glb',
-  'tree-v3-high.glb',
-  'tree-v3-mobile.glb',
   'terrain-v4-high.glb',
   'terrain-v4-mobile.glb',
   'corridor-v4-high.glb',

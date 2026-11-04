@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { getSelection, assetPath, recordKeys, selectionUrl } from '../src/regions.mjs';
-import { surfaceDetails, HeightField, TreeCollisions } from '../src/physics.mjs';
+import { getSelection, assetPath, recordKeys, selectionUrl } from '../src/core/regions.mjs';
+import { surfaceDetails, HeightField, TreeCollisions } from '../src/sim/physics.mjs';
 const combinations = [
   getSelection('?region=uetliberg'),
   getSelection('?region=lenzerheide'),
@@ -42,15 +42,10 @@ test('region assets use local folders while sharing the bike and common art', ()
       'terrain-v4-mobile.glb',
       'corridor-v4-high.glb',
       'corridor-v4-mobile.glb',
-      'tree-v2-high.glb',
-      'tree-v2-mobile.glb',
-      'tree-impostor.webp',
       'bike-v4.glb',
       'rider-v4.glb',
       'surface-details.json',
       'surface-details.bin',
-      'corridor-v3-high.glb',
-      'corridor-v3-mobile.glb',
       'tree-v4-high.glb',
       'tree-v4-mobile.glb',
       'tree-impostor-v4.webp',

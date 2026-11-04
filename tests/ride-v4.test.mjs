@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import { normalizeSetup, setupSignature, setupParameters } from '../src/setup.mjs';
-import { recordKeys, getSelection } from '../src/regions.mjs';
-import { BikePhysics } from '../src/physics.mjs';
-import { FrameBudget, PlacementIndex } from '../src/performance.mjs';
-import { rideMix } from '../src/audio.mjs';
-import { SkidMarks, RideFeedback } from '../src/feedback.mjs';
-import { finishBikeAndRider } from '../src/visuals.mjs';
+import { normalizeSetup, setupSignature, setupParameters } from '../src/sim/setup.mjs';
+import { recordKeys, getSelection } from '../src/core/regions.mjs';
+import { BikePhysics } from '../src/sim/physics.mjs';
+import { FrameBudget, PlacementIndex } from '../src/core/performance.mjs';
+import { rideMix } from '../src/audio/audio.mjs';
+import { SkidMarks, RideFeedback } from '../src/render/feedback.mjs';
+import { finishBikeAndRider } from '../src/render/visuals.mjs';
 const flat = { sample: () => 0, gradient: () => ({ x: 0, z: 0 }), contains: () => true },
   trail = {
     points: [
@@ -161,7 +161,7 @@ test('coated finish upgrades standard materials without losing physical defaults
   assert.ok(Number.isFinite(mesh.material.ior));
   assert.ok(mesh.material.specularColor.isColor);
 });
-import { RideCamera } from '../src/camera.mjs';
+import { RideCamera } from '../src/render/camera.mjs';
 test('chase camera stays directly behind the rider through turns and far off the route', () => {
   const follow = new RideCamera(),
     camera = new THREE.PerspectiveCamera(),

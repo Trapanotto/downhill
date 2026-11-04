@@ -8,7 +8,7 @@ import {
   TrailTracker,
   TreeCollisions,
   formatTime,
-} from '../src/physics.mjs';
+} from '../src/sim/physics.mjs';
 const meta = JSON.parse(fs.readFileSync(new URL('../public/assets/region.json', import.meta.url))),
   buffer = fs.readFileSync(new URL('../public/assets/height.bin', import.meta.url)),
   heights = new Float32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4),
