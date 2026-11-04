@@ -1,214 +1,1540 @@
 import './style.css';
-import {version as ASSET_VERSION} from '../package.json';
+import { version as ASSET_VERSION } from '../package.json';
 import * as THREE from 'three';
-import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
-import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
-import {REGIONS,getSelection,assetPath,recordKeys,selectionUrl} from './regions.mjs';
-import {clone as cloneSkeleton} from 'three/addons/utils/SkeletonUtils.js';
-import {ObstacleWorld} from './collisions.mjs';
-import {RiderAnimator} from './rider.mjs';
-import {normalizeSetup,SETUP_PRESETS,setupLabel,setupSignature} from './setup.mjs';
-import {FrameBudget} from './performance.mjs';
-import {RideAudio} from './audio.mjs';
-import {SkidMarks,RideFeedback} from './feedback.mjs';
-import {finishBikeAndRider} from './visuals.mjs';
-import {RideCamera} from './camera.mjs';
-import {ReplayTrack,minimapTransform} from './race.mjs';
-import {loadWorldV2} from './world-v2.js';
-import {Sky} from 'three/addons/objects/Sky.js';
-import {HeightField,BikePhysics,TrailTracker,surfaceDetails,clamp,formatTime,wrapAngle} from './physics.mjs';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { REGIONS, getSelection, assetPath, recordKeys, selectionUrl } from './regions.mjs';
+import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
+import { ObstacleWorld } from './collisions.mjs';
+import { RiderAnimator } from './rider.mjs';
+import { normalizeSetup, SETUP_PRESETS, setupLabel, setupSignature } from './setup.mjs';
+import { FrameBudget } from './performance.mjs';
+import { RideAudio } from './audio.mjs';
+import { SkidMarks, RideFeedback } from './feedback.mjs';
+import { finishBikeAndRider } from './visuals.mjs';
+import { RideCamera } from './camera.mjs';
+import { ReplayTrack, minimapTransform } from './race.mjs';
+import { loadWorldV2 } from './world-v2.js';
+import { Sky } from 'three/addons/objects/Sky.js';
+import {
+  HeightField,
+  BikePhysics,
+  TrailTracker,
+  surfaceDetails,
+  clamp,
+  formatTime,
+  wrapAngle,
+} from './physics.mjs';
 
-const $=id=>document.getElementById(id),base=import.meta.env.BASE_URL,asset=name=>base+assetPath(selected,name)+'?v='+ASSET_VERSION;
-const touch=matchMedia('(pointer:coarse)').matches||navigator.maxTouchPoints>0||matchMedia('(max-width:900px)').matches;
-if(touch)document.body.classList.add('touch-device');
-const storage={get(key,fallback){try{return JSON.parse(localStorage.getItem('trapanotto.'+key))??fallback}catch{return fallback}},set(key,value){try{localStorage.setItem('trapanotto.'+key,JSON.stringify(value))}catch{/* Private browsing can disable persistence. */}}};
-const selected=getSelection(location.search,storage.get('selected-region','uetliberg'),storage.get('selected-line','flow'));
-let bikeSetup=normalizeSetup(storage.get('bike-setup',{})),records=recordKeys(selected,bikeSetup);
-let showPerformance=storage.get('show-performance',false);const frameBudget=new FrameBudget(),feedback=new RideFeedback();let skidMarks,baseDpr=1,mapLast=-1000,rigAccumulator=0;
-let quality=storage.get('quality',touch?'mobile':'high'),sensitivity=storage.get('sensitivity',1),soundEnabled=storage.get('sound',false),autoPedal=storage.get('autoPedal',touch);
-const profiles={high:{terrain:'high',tree:'high',texture:'4k',trees:4200,detailedTrees:220,detailRadius:95,grassCount:650,fernCount:90,dpr:1.75,shadow:2048},balanced:{terrain:'mobile',tree:'mobile',texture:'2k',trees:4200,detailedTrees:130,detailRadius:75,grassCount:420,fernCount:65,dpr:1.35,shadow:1024},mobile:{terrain:'mobile',tree:'mobile',texture:'2k',trees:4200,detailedTrees:36,detailRadius:43,grassCount:150,fernCount:12,dpr:1.1,shadow:512}};
-if(!profiles[quality])quality=touch?'mobile':'high';let profile={...profiles[quality]};
-let renderer,scene,camera,terrain,bike,tracker,collisions,trail,region,forest,player,frontWheel,rearWheel,rider,shadow,sun;
-let state='loading',mode='race',elapsed=0,accumulator=0,lastTime=0,heroTime=0,runAir=0,totalAir=0,crashes=0,nearDistance=0,nearestIndex=0,toastTimeout,cameraFar=false,ready=false,frameCount=0,frameTotal=0,lowFrameSeconds=0,crashShown=false;
-const input={steer:0,throttle:false,brake:false,jump:false,sensitivity};const keys=new Set();let touchSteer=0,touchWeight=0,touchBrake=0,touchJumpHeld=false;
-const followPos=new THREE.Vector3(),lookTarget=new THREE.Vector3(),desired=new THREE.Vector3(),tmp=new THREE.Vector3();
-let particles,particlePositions,particleLife,particleVelocity,particleColors,particleCursor=0;
-let runBest=storage.get(records.best,null),ghostRecord=[],ghostSaved=storage.get(records.ghost,null),ghostMesh,lastGhostT=0,ghostIndex=0;
-let audio,frontFork,worldV2,lastLandingSerial=0,riderAnimator,ghostAnimator,ghostTemplate,ghostParts,crankPivot,pedalL,pedalR,barPivot,mapTransform,waypoint;
-const rideView=new RideCamera();let ghostTrace=new ReplayTrack(ghostSaved||[]),bestSplits=storage.get(records.splits,[]),runSplits=[];
+const $ = id => document.getElementById(id),
+  base = import.meta.env.BASE_URL,
+  asset = name => base + assetPath(selected, name) + '?v=' + ASSET_VERSION;
+const touch =
+  matchMedia('(pointer:coarse)').matches ||
+  navigator.maxTouchPoints > 0 ||
+  matchMedia('(max-width:900px)').matches;
+if (touch) document.body.classList.add('touch-device');
+const storage = {
+  get(key, fallback) {
+    try {
+      return JSON.parse(localStorage.getItem('trapanotto.' + key)) ?? fallback;
+    } catch {
+      return fallback;
+    }
+  },
+  set(key, value) {
+    try {
+      localStorage.setItem('trapanotto.' + key, JSON.stringify(value));
+    } catch {
+      /* Private browsing can disable persistence. */
+    }
+  },
+};
+const selected = getSelection(
+  location.search,
+  storage.get('selected-region', 'uetliberg'),
+  storage.get('selected-line', 'flow')
+);
+let bikeSetup = normalizeSetup(storage.get('bike-setup', {})),
+  records = recordKeys(selected, bikeSetup);
+let showPerformance = storage.get('show-performance', false);
+const frameBudget = new FrameBudget(),
+  feedback = new RideFeedback();
+let skidMarks,
+  baseDpr = 1,
+  mapLast = -1000,
+  rigAccumulator = 0;
+let quality = storage.get('quality', touch ? 'mobile' : 'high'),
+  sensitivity = storage.get('sensitivity', 1),
+  soundEnabled = storage.get('sound', false),
+  autoPedal = storage.get('autoPedal', touch);
+const profiles = {
+  high: {
+    terrain: 'high',
+    tree: 'high',
+    texture: '4k',
+    trees: 4200,
+    detailedTrees: 220,
+    detailRadius: 95,
+    grassCount: 650,
+    fernCount: 90,
+    dpr: 1.75,
+    shadow: 2048,
+  },
+  balanced: {
+    terrain: 'mobile',
+    tree: 'mobile',
+    texture: '2k',
+    trees: 4200,
+    detailedTrees: 130,
+    detailRadius: 75,
+    grassCount: 420,
+    fernCount: 65,
+    dpr: 1.35,
+    shadow: 1024,
+  },
+  mobile: {
+    terrain: 'mobile',
+    tree: 'mobile',
+    texture: '2k',
+    trees: 4200,
+    detailedTrees: 36,
+    detailRadius: 43,
+    grassCount: 150,
+    fernCount: 12,
+    dpr: 1.1,
+    shadow: 512,
+  },
+};
+if (!profiles[quality]) quality = touch ? 'mobile' : 'high';
+let profile = { ...profiles[quality] };
+let renderer,
+  scene,
+  camera,
+  terrain,
+  bike,
+  tracker,
+  collisions,
+  trail,
+  region,
+  forest,
+  player,
+  frontWheel,
+  rearWheel,
+  rider,
+  shadow,
+  sun;
+let state = 'loading',
+  mode = 'race',
+  elapsed = 0,
+  accumulator = 0,
+  lastTime = 0,
+  heroTime = 0,
+  runAir = 0,
+  totalAir = 0,
+  crashes = 0,
+  nearDistance = 0,
+  nearestIndex = 0,
+  toastTimeout,
+  cameraFar = false,
+  ready = false,
+  frameCount = 0,
+  frameTotal = 0,
+  lowFrameSeconds = 0,
+  crashShown = false;
+const input = { steer: 0, throttle: false, brake: false, jump: false, sensitivity };
+const keys = new Set();
+let touchSteer = 0,
+  touchWeight = 0,
+  touchBrake = 0,
+  touchJumpHeld = false;
+const followPos = new THREE.Vector3(),
+  lookTarget = new THREE.Vector3(),
+  desired = new THREE.Vector3(),
+  tmp = new THREE.Vector3();
+let particles,
+  particlePositions,
+  particleLife,
+  particleVelocity,
+  particleColors,
+  particleCursor = 0;
+let runBest = storage.get(records.best, null),
+  ghostRecord = [],
+  ghostSaved = storage.get(records.ghost, null),
+  ghostMesh,
+  lastGhostT = 0,
+  ghostIndex = 0;
+let audio,
+  frontFork,
+  worldV2,
+  lastLandingSerial = 0,
+  riderAnimator,
+  ghostAnimator,
+  ghostTemplate,
+  ghostParts,
+  crankPivot,
+  pedalL,
+  pedalR,
+  barPivot,
+  mapTransform,
+  waypoint;
+const rideView = new RideCamera();
+let ghostTrace = new ReplayTrack(ghostSaved || []),
+  bestSplits = storage.get(records.splits, []),
+  runSplits = [];
 
-function changeRegion(id,line='flow'){
- storage.set('selected-region',id);storage.set('selected-line',line);location.assign(selectionUrl(base,id,line));
+function changeRegion(id, line = 'flow') {
+  storage.set('selected-region', id);
+  storage.set('selected-line', line);
+  location.assign(selectionUrl(base, id, line));
 }
-function configureRegionMenu(){
- document.title='Trapanotto Downhill Biking — '+selected.label;
- $('world').setAttribute('aria-label','3D Downhill-Spiel in '+selected.label);
- $('load-caption').textContent=selected.caption;
- $('location-name').textContent=selected.place;
- $('location-time').textContent=selected.id==='lenzerheide'?'ALPINE FLOW':'GOLDEN HOUR';
- $('region-eyebrow').textContent=selected.number+' / '+selected.tagline;
- $('route-location').textContent=selected.location;
- $('route-title').textContent=selected.title;$('run-title').textContent=selected.title;
- $('route-number').textContent=selected.number;$('route-difficulty').textContent=selected.difficulty;
- $('start-coordinates').innerHTML=selected.coordinates;
- for(const region of Object.values(REGIONS)){
-  const button=document.createElement('button');button.textContent=region.number+' / '+region.label.toUpperCase();button.className=region.id===selected.id?'selected':'';button.setAttribute('aria-pressed',String(region.id===selected.id));button.onclick=()=>{if(region.id!==selected.id)changeRegion(region.id)};$('region-picker').append(button);
- }
- show('line-picker',selected.id==='lenzerheide');
- for(const button of $('line-picker').querySelectorAll('button')){
-  const active=button.dataset.line===selected.line;button.classList.toggle('selected',active);button.setAttribute('aria-pressed',String(active));button.onclick=()=>{if(!active)changeRegion('lenzerheide',button.dataset.line)};
- }
+function configureRegionMenu() {
+  document.title = 'Trapanotto Downhill Biking — ' + selected.label;
+  $('world').setAttribute('aria-label', '3D Downhill-Spiel in ' + selected.label);
+  $('load-caption').textContent = selected.caption;
+  $('location-name').textContent = selected.place;
+  $('location-time').textContent = selected.id === 'lenzerheide' ? 'ALPINE FLOW' : 'GOLDEN HOUR';
+  $('region-eyebrow').textContent = selected.number + ' / ' + selected.tagline;
+  $('route-location').textContent = selected.location;
+  $('route-title').textContent = selected.title;
+  $('run-title').textContent = selected.title;
+  $('route-number').textContent = selected.number;
+  $('route-difficulty').textContent = selected.difficulty;
+  $('start-coordinates').innerHTML = selected.coordinates;
+  for (const region of Object.values(REGIONS)) {
+    const button = document.createElement('button');
+    button.textContent = region.number + ' / ' + region.label.toUpperCase();
+    button.className = region.id === selected.id ? 'selected' : '';
+    button.setAttribute('aria-pressed', String(region.id === selected.id));
+    button.onclick = () => {
+      if (region.id !== selected.id) changeRegion(region.id);
+    };
+    $('region-picker').append(button);
+  }
+  show('line-picker', selected.id === 'lenzerheide');
+  for (const button of $('line-picker').querySelectorAll('button')) {
+    const active = button.dataset.line === selected.line;
+    button.classList.toggle('selected', active);
+    button.setAttribute('aria-pressed', String(active));
+    button.onclick = () => {
+      if (!active) changeRegion('lenzerheide', button.dataset.line);
+    };
+  }
 }
 configureRegionMenu();
 
-function show(id,visible){$(id).classList.toggle('hidden',!visible)}
-function toast(message,duration=2300){$('toast').textContent=message;$('toast').style.opacity='1';clearTimeout(toastTimeout);toastTimeout=setTimeout(()=>$('toast').style.opacity='0',duration)}
-function setLoading(ratio,message){$('load-bar').style.width=Math.round(clamp(ratio,0,1)*100)+'%';if(message)$('load-text').textContent=message}
-function dialog(html,onClose){$('panel-content').innerHTML=html;$('panel').showModal();$('panel').onclose=()=>{if(onClose)onClose()}}
-function closePanel(){$('panel').close()}
-function showMenu(){state='menu';show('performance-hud',false);keys.clear();show('menu',true);show('header',true);show('hud',false);show('touch',false);show('minimap',false);show('crash',false);show('countdown',false);$('vignette').style.opacity='1';if(player){bike.reset();syncPlayer();}if(ghostMesh)ghostMesh.visible=false;if(waypoint)waypoint.visible=false;refreshBest()}
-function refreshBest(){$('menu-best').textContent=runBest?formatTime(runBest):'NOCH KEIN RUN'}
-function chooseMode(next){mode=next;$('mode-race').classList.toggle('selected',mode==='race');$('mode-free').classList.toggle('selected',mode==='free');$('start').querySelector('span').textContent=mode==='race'?'ABFAHRT STARTEN':'BERG ERKUNDEN'}
+function show(id, visible) {
+  $(id).classList.toggle('hidden', !visible);
+}
+function toast(message, duration = 2300) {
+  $('toast').textContent = message;
+  $('toast').style.opacity = '1';
+  clearTimeout(toastTimeout);
+  toastTimeout = setTimeout(() => ($('toast').style.opacity = '0'), duration);
+}
+function setLoading(ratio, message) {
+  $('load-bar').style.width = Math.round(clamp(ratio, 0, 1) * 100) + '%';
+  if (message) $('load-text').textContent = message;
+}
+function dialog(html, onClose) {
+  $('panel-content').innerHTML = html;
+  $('panel').showModal();
+  $('panel').onclose = () => {
+    if (onClose) onClose();
+  };
+}
+function closePanel() {
+  $('panel').close();
+}
+function showMenu() {
+  state = 'menu';
+  show('performance-hud', false);
+  keys.clear();
+  show('menu', true);
+  show('header', true);
+  show('hud', false);
+  show('touch', false);
+  show('minimap', false);
+  show('crash', false);
+  show('countdown', false);
+  $('vignette').style.opacity = '1';
+  if (player) {
+    bike.reset();
+    syncPlayer();
+  }
+  if (ghostMesh) ghostMesh.visible = false;
+  if (waypoint) waypoint.visible = false;
+  refreshBest();
+}
+function refreshBest() {
+  $('menu-best').textContent = runBest ? formatTime(runBest) : 'NOCH KEIN RUN';
+}
+function chooseMode(next) {
+  mode = next;
+  $('mode-race').classList.toggle('selected', mode === 'race');
+  $('mode-free').classList.toggle('selected', mode === 'free');
+  $('start').querySelector('span').textContent = mode === 'race' ? 'ABFAHRT STARTEN' : 'BERG ERKUNDEN';
+}
 
-async function init(){
- try{
-  renderer=new THREE.WebGLRenderer({canvas:$('world'),antialias:!touch,powerPreference:'high-performance'});
-  baseDpr=Math.min(devicePixelRatio,profile.dpr);renderer.setPixelRatio(baseDpr);renderer.setSize(innerWidth,innerHeight);
-  renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.96;renderer.shadowMap.autoUpdate=false;
-  renderer.shadowMap.enabled=quality!=='mobile';renderer.shadowMap.type=THREE.PCFSoftShadowMap;
-  scene=new THREE.Scene();scene.background=new THREE.Color(selected.id==='lenzerheide'?'#c7dbe8':'#c5d6d0');scene.fog=new THREE.FogExp2(selected.id==='lenzerheide'?'#c8dae4':'#bfcfbd',selected.id==='lenzerheide'?.00024:.00065);
-  camera=new THREE.PerspectiveCamera(58,innerWidth/innerHeight,.12,6500);
-  const sky=new Sky();sky.scale.setScalar(6000);const skyU=sky.material.uniforms;skyU.turbidity.value=3;skyU.rayleigh.value=1.7;skyU.mieCoefficient.value=.003;skyU.mieDirectionalG.value=.8;skyU.sunPosition.value.set(-1600,selected.id==='lenzerheide'?2200:1350,800);scene.add(sky);const environmentScene=new THREE.Scene();environmentScene.add(sky.clone());const pmrem=new THREE.PMREMGenerator(renderer);scene.environment=pmrem.fromScene(environmentScene,.04).texture;scene.environmentIntensity=.45;pmrem.dispose();
-  scene.add(new THREE.HemisphereLight('#e0edff','#526047',1.0));
-  sun=new THREE.DirectionalLight(selected.id==='lenzerheide'?'#fff0df':'#ffe0b4',2.8);sun.position.set(-90,160,80);sun.castShadow=true;sun.shadow.mapSize.setScalar(profile.shadow);sun.shadow.camera.left=-45;sun.shadow.camera.right=45;sun.shadow.camera.top=45;sun.shadow.camera.bottom=-45;sun.shadow.camera.near=1;sun.shadow.camera.far=350;sun.shadow.bias=-.00025;sun.shadow.normalBias=.08;sun.shadow.radius=2;scene.add(sun,sun.target);
-  setLoading(.08,'DIE LANDSCHAFT LÄDT.');
-  const manager=new THREE.LoadingManager();let loaded=0;manager.onProgress=(_,done,total)=>setLoading(.12+.76*(done/total));
-  const loader=new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);const texLoader=new THREE.TextureLoader(manager);
-  const json=async name=>{const r=await fetch(asset(name));if(!r.ok)throw Error(name+': '+r.status);return r.json()};
-  const data=await Promise.all([json('region.json'),json('trail.json'),json('forest.json'),fetch(asset('height.bin')).then(r=>{if(!r.ok)throw Error('Höhendaten fehlen');return r.arrayBuffer()}),loader.loadAsync(asset(`terrain-v4-${profile.terrain}.glb`)),Promise.resolve(null),Promise.resolve(null),loader.loadAsync(asset('bike-v4.glb')),loader.loadAsync(asset('landmark.glb')),texLoader.loadAsync(asset(`${selected.ortho}-${profile.texture}.webp`)),fetch(asset('surface.bin')).then(r=>{if(!r.ok)throw Error('Fahrflächen fehlen');return r.arrayBuffer()}),json('decor.json'),json('surface-details.json'),fetch(asset('surface-details.bin')).then(r=>{if(!r.ok)throw Error('Streckendetails fehlen');return r.arrayBuffer()}),loader.loadAsync(asset('rider-v4.glb'))]);
-  [region,trail,forest]=data;terrain=new HeightField(region,new Float32Array(data[3]),new Uint8Array(data[10]),data[11].roots,surfaceDetails(data[12],new Int16Array(data[13])));bike=new BikePhysics(terrain,trail,bikeSetup);tracker=new TrailTracker(trail);collisions=new ObstacleWorld(forest,data[11]);mapTransform=minimapTransform(trail.points);
-  const ortho=data[9];ortho.colorSpace=THREE.SRGBColorSpace;ortho.flipY=false;ortho.anisotropy=Math.min(8,renderer.capabilities.getMaxAnisotropy());
-  const groundMat=new THREE.MeshStandardMaterial({map:ortho,roughness:.96});
-  data[4].scene.traverse(o=>{if(o.isMesh){o.material=groundMat;o.receiveShadow=true}});scene.add(data[4].scene);
-  setLoading(.55,'DER WALD WIRD BEREIT.');
-  worldV2=await loadWorldV2({scene,renderer,loader,textures:texLoader,asset,meta:region,forest,decor:data[11],profile,baseTerrain:data[4].scene});
-  player=data[7].scene;player.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});finishBikeAndRider(player);scene.add(player);
-  player.updateMatrixWorld(true);
-  function pivot(name,x,y,z){const node=player.getObjectByName(name);if(!node)return null;const group=new THREE.Group();group.name=name+'Pivot';group.position.set(x,y,z);player.add(group);group.attach(node);return group}
-  frontWheel=pivot('WheelFront',0,.42,-.72);rearWheel=pivot('WheelRear',0,.42,.72);frontFork=pivot('SuspensionFork',0,.8,-.6);barPivot=pivot('Handlebar',0,1.07,-.49);crankPivot=pivot('Crank',0,.48,.18);pedalL=player.getObjectByName('PedalL');pedalR=player.getObjectByName('PedalR');rider=data[14].scene;rider.name='RiderVisual';player.add(rider);player.updateMatrixWorld(true);ghostTemplate=cloneSkeleton(player);riderAnimator=new RiderAnimator(player,rider,{crank:crankPivot,pedalL,pedalR,handlebar:barPivot});
-  if(selected.id==='lenzerheide'){const panorama=await loader.loadAsync(asset('panorama-v4.glb'));panorama.scene.traverse(o=>{if(o.isMesh){o.material=new THREE.MeshStandardMaterial({map:o.material.map||null,vertexColors:!o.material.map,roughness:1});o.receiveShadow=false}});scene.add(panorama.scene);}
-  data[8].scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true}});scene.add(data[8].scene);
-  const shadowTex=softDisc();shadow=new THREE.Mesh(new THREE.PlaneGeometry(2.2,3.2),new THREE.MeshBasicMaterial({map:shadowTex,transparent:true,opacity:.6,depthWrite:false,polygonOffset:true,polygonOffsetFactor:-3}));shadow.rotation.x=-Math.PI/2;scene.add(shadow);
-  buildCheckpoints();buildMarkers();buildWaypoint();buildParticles();buildGhost();skidMarks=new SkidMarks(scene,terrain,touch?100:220);
-  $('route-length').textContent=(Math.round(trail.length/10)/100).toFixed(2);$('route-drop').textContent=trail.drop;$('summit-alt').innerHTML=Math.round(trail.points[0][1]+region.heightOrigin)+'<span>m</span>';
-  setLoading(.98,'DEINE LINIE IST BEREIT.');syncPlayer();heroCamera(0,true);worldV2.update(camera,bike,0,true);
-  renderer.compile(scene,camera);renderer.render(scene,camera);
-  await new Promise(r=>requestAnimationFrame(r));ready=true;$('bike-setup-label').textContent=setupLabel(bikeSetup);$('loader').style.transition='opacity .6s';$('loader').style.opacity='0';setTimeout(()=>$('loader').remove(),650);showMenu();lastTime=performance.now();requestAnimationFrame(animate);
-  if(import.meta.env.PROD&&'serviceWorker' in navigator)navigator.serviceWorker.register(base+'sw.js').catch(()=>{});
-  window.__TRAPANOTTO__={get state(){return state},get bike(){return bike},get terrain(){return terrain},get trail(){return trail},get tracker(){return tracker},get renderer(){return renderer},get profile(){return profile},start:startRun,respawn:respawn,showMenu};
- }catch(error){console.error(error);setLoading(1,'DAS LADEN WURDE UNTERBROCHEN.');$('load-caption').textContent='Bitte Seite erneut laden. '+(error?.message||'Eine Spieldatei konnte nicht geladen werden.');$('retry').hidden=false;$('retry').onclick=()=>location.reload()}
+async function init() {
+  try {
+    renderer = new THREE.WebGLRenderer({
+      canvas: $('world'),
+      antialias: !touch,
+      powerPreference: 'high-performance',
+    });
+    baseDpr = Math.min(devicePixelRatio, profile.dpr);
+    renderer.setPixelRatio(baseDpr);
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.96;
+    renderer.shadowMap.autoUpdate = false;
+    renderer.shadowMap.enabled = quality !== 'mobile';
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(selected.id === 'lenzerheide' ? '#c7dbe8' : '#c5d6d0');
+    scene.fog = new THREE.FogExp2(
+      selected.id === 'lenzerheide' ? '#c8dae4' : '#bfcfbd',
+      selected.id === 'lenzerheide' ? 0.00024 : 0.00065
+    );
+    camera = new THREE.PerspectiveCamera(58, innerWidth / innerHeight, 0.12, 6500);
+    const sky = new Sky();
+    sky.scale.setScalar(6000);
+    const skyU = sky.material.uniforms;
+    skyU.turbidity.value = 3;
+    skyU.rayleigh.value = 1.7;
+    skyU.mieCoefficient.value = 0.003;
+    skyU.mieDirectionalG.value = 0.8;
+    skyU.sunPosition.value.set(-1600, selected.id === 'lenzerheide' ? 2200 : 1350, 800);
+    scene.add(sky);
+    const environmentScene = new THREE.Scene();
+    environmentScene.add(sky.clone());
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmrem.fromScene(environmentScene, 0.04).texture;
+    scene.environmentIntensity = 0.45;
+    pmrem.dispose();
+    scene.add(new THREE.HemisphereLight('#e0edff', '#526047', 1.0));
+    sun = new THREE.DirectionalLight(selected.id === 'lenzerheide' ? '#fff0df' : '#ffe0b4', 2.8);
+    sun.position.set(-90, 160, 80);
+    sun.castShadow = true;
+    sun.shadow.mapSize.setScalar(profile.shadow);
+    sun.shadow.camera.left = -45;
+    sun.shadow.camera.right = 45;
+    sun.shadow.camera.top = 45;
+    sun.shadow.camera.bottom = -45;
+    sun.shadow.camera.near = 1;
+    sun.shadow.camera.far = 350;
+    sun.shadow.bias = -0.00025;
+    sun.shadow.normalBias = 0.08;
+    sun.shadow.radius = 2;
+    scene.add(sun, sun.target);
+    setLoading(0.08, 'DIE LANDSCHAFT LÄDT.');
+    const manager = new THREE.LoadingManager();
+    let loaded = 0;
+    manager.onProgress = (_, done, total) => setLoading(0.12 + 0.76 * (done / total));
+    const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
+    const texLoader = new THREE.TextureLoader(manager);
+    const json = async name => {
+      const r = await fetch(asset(name));
+      if (!r.ok) throw Error(name + ': ' + r.status);
+      return r.json();
+    };
+    const data = await Promise.all([
+      json('region.json'),
+      json('trail.json'),
+      json('forest.json'),
+      fetch(asset('height.bin')).then(r => {
+        if (!r.ok) throw Error('Höhendaten fehlen');
+        return r.arrayBuffer();
+      }),
+      loader.loadAsync(asset(`terrain-v4-${profile.terrain}.glb`)),
+      Promise.resolve(null),
+      Promise.resolve(null),
+      loader.loadAsync(asset('bike-v4.glb')),
+      loader.loadAsync(asset('landmark.glb')),
+      texLoader.loadAsync(asset(`${selected.ortho}-${profile.texture}.webp`)),
+      fetch(asset('surface.bin')).then(r => {
+        if (!r.ok) throw Error('Fahrflächen fehlen');
+        return r.arrayBuffer();
+      }),
+      json('decor.json'),
+      json('surface-details.json'),
+      fetch(asset('surface-details.bin')).then(r => {
+        if (!r.ok) throw Error('Streckendetails fehlen');
+        return r.arrayBuffer();
+      }),
+      loader.loadAsync(asset('rider-v4.glb')),
+    ]);
+    [region, trail, forest] = data;
+    terrain = new HeightField(
+      region,
+      new Float32Array(data[3]),
+      new Uint8Array(data[10]),
+      data[11].roots,
+      surfaceDetails(data[12], new Int16Array(data[13]))
+    );
+    bike = new BikePhysics(terrain, trail, bikeSetup);
+    tracker = new TrailTracker(trail);
+    collisions = new ObstacleWorld(forest, data[11]);
+    mapTransform = minimapTransform(trail.points);
+    const ortho = data[9];
+    ortho.colorSpace = THREE.SRGBColorSpace;
+    ortho.flipY = false;
+    ortho.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    const groundMat = new THREE.MeshStandardMaterial({ map: ortho, roughness: 0.96 });
+    data[4].scene.traverse(o => {
+      if (o.isMesh) {
+        o.material = groundMat;
+        o.receiveShadow = true;
+      }
+    });
+    scene.add(data[4].scene);
+    setLoading(0.55, 'DER WALD WIRD BEREIT.');
+    worldV2 = await loadWorldV2({
+      scene,
+      renderer,
+      loader,
+      textures: texLoader,
+      asset,
+      meta: region,
+      forest,
+      decor: data[11],
+      profile,
+      baseTerrain: data[4].scene,
+    });
+    player = data[7].scene;
+    player.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
+    finishBikeAndRider(player);
+    scene.add(player);
+    player.updateMatrixWorld(true);
+    function pivot(name, x, y, z) {
+      const node = player.getObjectByName(name);
+      if (!node) return null;
+      const group = new THREE.Group();
+      group.name = name + 'Pivot';
+      group.position.set(x, y, z);
+      player.add(group);
+      group.attach(node);
+      return group;
+    }
+    frontWheel = pivot('WheelFront', 0, 0.42, -0.72);
+    rearWheel = pivot('WheelRear', 0, 0.42, 0.72);
+    frontFork = pivot('SuspensionFork', 0, 0.8, -0.6);
+    barPivot = pivot('Handlebar', 0, 1.07, -0.49);
+    crankPivot = pivot('Crank', 0, 0.48, 0.18);
+    pedalL = player.getObjectByName('PedalL');
+    pedalR = player.getObjectByName('PedalR');
+    rider = data[14].scene;
+    rider.name = 'RiderVisual';
+    player.add(rider);
+    player.updateMatrixWorld(true);
+    ghostTemplate = cloneSkeleton(player);
+    riderAnimator = new RiderAnimator(player, rider, {
+      crank: crankPivot,
+      pedalL,
+      pedalR,
+      handlebar: barPivot,
+    });
+    if (selected.id === 'lenzerheide') {
+      const panorama = await loader.loadAsync(asset('panorama-v4.glb'));
+      panorama.scene.traverse(o => {
+        if (o.isMesh) {
+          o.material = new THREE.MeshStandardMaterial({
+            map: o.material.map || null,
+            vertexColors: !o.material.map,
+            roughness: 1,
+          });
+          o.receiveShadow = false;
+        }
+      });
+      scene.add(panorama.scene);
+    }
+    data[8].scene.traverse(o => {
+      if (o.isMesh) {
+        o.castShadow = true;
+        o.receiveShadow = true;
+      }
+    });
+    scene.add(data[8].scene);
+    const shadowTex = softDisc();
+    shadow = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.2, 3.2),
+      new THREE.MeshBasicMaterial({
+        map: shadowTex,
+        transparent: true,
+        opacity: 0.6,
+        depthWrite: false,
+        polygonOffset: true,
+        polygonOffsetFactor: -3,
+      })
+    );
+    shadow.rotation.x = -Math.PI / 2;
+    scene.add(shadow);
+    buildCheckpoints();
+    buildMarkers();
+    buildWaypoint();
+    buildParticles();
+    buildGhost();
+    skidMarks = new SkidMarks(scene, terrain, touch ? 100 : 220);
+    $('route-length').textContent = (Math.round(trail.length / 10) / 100).toFixed(2);
+    $('route-drop').textContent = trail.drop;
+    $('summit-alt').innerHTML = Math.round(trail.points[0][1] + region.heightOrigin) + '<span>m</span>';
+    setLoading(0.98, 'DEINE LINIE IST BEREIT.');
+    syncPlayer();
+    heroCamera(0, true);
+    worldV2.update(camera, bike, 0, true);
+    renderer.compile(scene, camera);
+    renderer.render(scene, camera);
+    await new Promise(r => requestAnimationFrame(r));
+    ready = true;
+    $('bike-setup-label').textContent = setupLabel(bikeSetup);
+    $('loader').style.transition = 'opacity .6s';
+    $('loader').style.opacity = '0';
+    setTimeout(() => $('loader').remove(), 650);
+    showMenu();
+    lastTime = performance.now();
+    requestAnimationFrame(animate);
+    if (import.meta.env.PROD && 'serviceWorker' in navigator)
+      navigator.serviceWorker.register(base + 'sw.js').catch(() => {});
+    window.__TRAPANOTTO__ = {
+      get state() {
+        return state;
+      },
+      get bike() {
+        return bike;
+      },
+      get terrain() {
+        return terrain;
+      },
+      get trail() {
+        return trail;
+      },
+      get tracker() {
+        return tracker;
+      },
+      get renderer() {
+        return renderer;
+      },
+      get profile() {
+        return profile;
+      },
+      start: startRun,
+      respawn: respawn,
+      showMenu,
+    };
+  } catch (error) {
+    console.error(error);
+    setLoading(1, 'DAS LADEN WURDE UNTERBROCHEN.');
+    $('load-caption').textContent =
+      'Bitte Seite erneut laden. ' + (error?.message || 'Eine Spieldatei konnte nicht geladen werden.');
+    $('retry').hidden = false;
+    $('retry').onclick = () => location.reload();
+  }
 }
-function softDisc(){const c=document.createElement('canvas');c.width=c.height=64;const ctx=c.getContext('2d'),g=ctx.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'rgba(8,17,8,.8)');g.addColorStop(.5,'rgba(8,17,8,.3)');g.addColorStop(1,'rgba(8,17,8,0)');ctx.fillStyle=g;ctx.fillRect(0,0,64,64);return new THREE.CanvasTexture(c)}
-function pole(x,z,h,color){const g=new THREE.CylinderGeometry(.045,.045,h,7);const m=new THREE.MeshStandardMaterial({color,roughness:.7});const o=new THREE.Mesh(g,m);o.position.set(x,terrain.sample(x,z)+h/2,z);o.castShadow=true;scene.add(o);collisions.add({type:'pole',x,z,bottom:terrain.sample(x,z),top:terrain.sample(x,z)+h,radius:.045});return o}
-const checkpointGroups=[];
-function buildCheckpoints(){
- trail.checkpoints.forEach((index,n)=>{const p=trail.points[index],q=trail.points[Math.min(index+5,trail.points.length-1)],prev=trail.points[Math.max(index-5,0)],dir=new THREE.Vector2(q[0]-prev[0],q[2]-prev[2]).normalize(),right=new THREE.Vector2(-dir.y,dir.x);const group=[];
-  for(const sign of [-1,1]){const x=p[0]+right.x*2.6*sign,z=p[2]+right.y*2.6*sign;group.push(pole(x,z,(n===0||n===trail.checkpoints.length-1)?3.7:2.25,n===trail.checkpoints.length-1?'#e6edcc':'#ec774b'));
-   const flag=new THREE.Mesh(new THREE.PlaneGeometry(.5,.9),new THREE.MeshStandardMaterial({color:n===0?'#ec774b':'#dce6c3',side:THREE.DoubleSide,roughness:.8}));flag.position.set(x,terrain.sample(x,z)+1.6,z);flag.rotation.y=Math.atan2(-dir.x,-dir.y);scene.add(flag);group.push(flag)}
-  if(n===0||n===trail.checkpoints.length-1){const c=document.createElement('canvas');c.width=512;c.height=90;const ctx=c.getContext('2d');ctx.fillStyle=n===0?'#ea7649':'#e4eacb';ctx.fillRect(0,0,512,90);ctx.fillStyle='#183025';ctx.font='bold 32px Arial';ctx.textAlign='center';ctx.fillText(n===0?'TRAPANOTTO / START':selected.title.toUpperCase()+' / FINISH',256,55);const banner=new THREE.Mesh(new THREE.PlaneGeometry(5.25,.85),new THREE.MeshStandardMaterial({map:Object.assign(new THREE.CanvasTexture(c),{colorSpace:THREE.SRGBColorSpace}),side:THREE.DoubleSide,roughness:.8}));banner.position.set(p[0],p[1]+3.35,p[2]);banner.rotation.y=Math.atan2(-dir.x,-dir.y);scene.add(banner);group.push(banner)}checkpointGroups.push(group);
- });
+function softDisc() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const ctx = c.getContext('2d'),
+    g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(8,17,8,.8)');
+  g.addColorStop(0.5, 'rgba(8,17,8,.3)');
+  g.addColorStop(1, 'rgba(8,17,8,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
 }
-function buildMarkers(){
- const mat=new THREE.MeshStandardMaterial({color:'#dfe8bb',roughness:1,emissive:'#99ab72',emissiveIntensity:.08,side:THREE.DoubleSide});
- for(let i=28;i<trail.points.length-10;i+=65){const p=trail.points[i],q=trail.points[i+4],angle=Math.atan2(q[0]-p[0],q[2]-p[2]),shape=new THREE.Shape();shape.moveTo(0,.6);shape.lineTo(-.48,-.24);shape.lineTo(-.29,-.37);shape.lineTo(0,.13);shape.lineTo(.29,-.37);shape.lineTo(.48,-.24);shape.closePath();const geo=new THREE.ShapeGeometry(shape);geo.rotateX(-Math.PI/2);const mark=new THREE.Mesh(geo,mat);mark.position.set(p[0],p[1]+.04,p[2]);mark.rotation.y=angle;scene.add(mark)}
+function pole(x, z, h, color) {
+  const g = new THREE.CylinderGeometry(0.045, 0.045, h, 7);
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+  const o = new THREE.Mesh(g, m);
+  o.position.set(x, terrain.sample(x, z) + h / 2, z);
+  o.castShadow = true;
+  scene.add(o);
+  collisions.add({
+    type: 'pole',
+    x,
+    z,
+    bottom: terrain.sample(x, z),
+    top: terrain.sample(x, z) + h,
+    radius: 0.045,
+  });
+  return o;
 }
-function buildParticles(){const count=130;particlePositions=new Float32Array(count*3);particleVelocity=new Float32Array(count*3);particleLife=new Float32Array(count);particleColors=new Float32Array(count*3);const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(particlePositions,3));geo.setAttribute('color',new THREE.BufferAttribute(particleColors,3));const tex=softDisc();particles=new THREE.Points(geo,new THREE.PointsMaterial({size:.23,map:tex,transparent:true,opacity:.32,depthWrite:false,vertexColors:true,color:'#dac2a1'}));particles.frustumCulled=false;scene.add(particles)}
-function updateParticles(dt){for(let i=0;i<particleLife.length;i++){particleLife[i]-=dt;const k=i*3;if(particleLife[i]>0){particlePositions[k]+=particleVelocity[k]*dt;particlePositions[k+1]+=particleVelocity[k+1]*dt;particlePositions[k+2]+=particleVelocity[k+2]*dt;const a=particleLife[i]/1.2;particleColors[k]=particleColors[k+1]=particleColors[k+2]=a}else particlePositions[k+1]=-1000}if(state==='riding'&&!bike.air&&bike.speed>5){const i=particleCursor++%particleLife.length,k=i*3;particleLife[i]=1.2;particlePositions[k]=bike.x+Math.sin(bike.yaw)*.7;particlePositions[k+1]=bike.y+.12;particlePositions[k+2]=bike.z+Math.cos(bike.yaw)*.7;particleVelocity[k]=(Math.random()-.5)*1.2;particleVelocity[k+1]=.4+Math.random()*.5;particleVelocity[k+2]=(Math.random()-.5)*1.2}particles.geometry.attributes.position.needsUpdate=true;particles.geometry.attributes.color.needsUpdate=true}
-function buildGhost(){
- if(ghostMesh){scene.remove(ghostMesh);ghostMesh.traverse(o=>{if(o.isMesh)o.material.dispose()});ghostMesh=null}ghostTrace=new ReplayTrack(ghostSaved||[]);if(!ghostSaved?.length)return;
- ghostMesh=cloneSkeleton(ghostTemplate);ghostMesh.traverse(o=>{if(o.isMesh){o.material=new THREE.MeshBasicMaterial({color:'#d9edce',transparent:true,opacity:.20,depthWrite:false});o.castShadow=false;o.frustumCulled=false}});
- ghostParts={front:ghostMesh.getObjectByName('WheelFrontPivot'),rear:ghostMesh.getObjectByName('WheelRearPivot'),fork:ghostMesh.getObjectByName('SuspensionForkPivot')};ghostAnimator=new RiderAnimator(ghostMesh,ghostMesh.getObjectByName('RiderVisual'),{crank:ghostMesh.getObjectByName('CrankPivot'),pedalL:ghostMesh.getObjectByName('PedalL'),pedalR:ghostMesh.getObjectByName('PedalR'),handlebar:ghostMesh.getObjectByName('HandlebarPivot')});ghostMesh.visible=false;scene.add(ghostMesh);
+const checkpointGroups = [];
+function buildCheckpoints() {
+  trail.checkpoints.forEach((index, n) => {
+    const p = trail.points[index],
+      q = trail.points[Math.min(index + 5, trail.points.length - 1)],
+      prev = trail.points[Math.max(index - 5, 0)],
+      dir = new THREE.Vector2(q[0] - prev[0], q[2] - prev[2]).normalize(),
+      right = new THREE.Vector2(-dir.y, dir.x);
+    const group = [];
+    for (const sign of [-1, 1]) {
+      const x = p[0] + right.x * 2.6 * sign,
+        z = p[2] + right.y * 2.6 * sign;
+      group.push(
+        pole(
+          x,
+          z,
+          n === 0 || n === trail.checkpoints.length - 1 ? 3.7 : 2.25,
+          n === trail.checkpoints.length - 1 ? '#e6edcc' : '#ec774b'
+        )
+      );
+      const flag = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.5, 0.9),
+        new THREE.MeshStandardMaterial({
+          color: n === 0 ? '#ec774b' : '#dce6c3',
+          side: THREE.DoubleSide,
+          roughness: 0.8,
+        })
+      );
+      flag.position.set(x, terrain.sample(x, z) + 1.6, z);
+      flag.rotation.y = Math.atan2(-dir.x, -dir.y);
+      scene.add(flag);
+      group.push(flag);
+    }
+    if (n === 0 || n === trail.checkpoints.length - 1) {
+      const c = document.createElement('canvas');
+      c.width = 512;
+      c.height = 90;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = n === 0 ? '#ea7649' : '#e4eacb';
+      ctx.fillRect(0, 0, 512, 90);
+      ctx.fillStyle = '#183025';
+      ctx.font = 'bold 32px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(n === 0 ? 'TRAPANOTTO / START' : selected.title.toUpperCase() + ' / FINISH', 256, 55);
+      const banner = new THREE.Mesh(
+        new THREE.PlaneGeometry(5.25, 0.85),
+        new THREE.MeshStandardMaterial({
+          map: Object.assign(new THREE.CanvasTexture(c), { colorSpace: THREE.SRGBColorSpace }),
+          side: THREE.DoubleSide,
+          roughness: 0.8,
+        })
+      );
+      banner.position.set(p[0], p[1] + 3.35, p[2]);
+      banner.rotation.y = Math.atan2(-dir.x, -dir.y);
+      scene.add(banner);
+      group.push(banner);
+    }
+    checkpointGroups.push(group);
+  });
 }
-function recordGhost(){ghostRecord.push([+elapsed.toFixed(3),+bike.x.toFixed(3),+bike.y.toFixed(3),+bike.z.toFixed(3),bike.yaw,bike.pitch,bike.lean,nearestIndex/(trail.points.length-1),riderAnimator.phase,bike.weight,bike.frontCompression,bike.rearCompression,bike.steer,bike.brakePressure,bike.jumpCharge,frontWheel?.rotation.x||0,bike.landingImpact]);lastGhostT=elapsed}
-function updateGhost(){if(!ghostMesh||mode!=='race')return;const g=ghostTrace.sample(elapsed);ghostMesh.visible=!!g;if(!g)return;const heave=(g[10]+g[11])*.5;ghostMesh.position.set(g[1],g[2]-heave,g[3]);ghostMesh.rotation.set(0,g[4],0);ghostMesh.rotateX(g[5]+(g[11]-g[10])*.5);ghostMesh.rotateZ(g[6]);if(ghostParts.front){ghostParts.front.position.y=ghostParts.rear.position.y=.42+heave;ghostParts.front.rotation.y=-g[12]*.23;ghostParts.front.rotation.x=ghostParts.rear.rotation.x=g[15]}if(ghostParts.fork){ghostParts.fork.scale.y=1-g[10]*.65;ghostParts.fork.rotation.y=-g[12]*.1;}ghostAnimator.update({speed:0,weight:g[9],lean:g[6],frontCompression:g[10],rearCompression:g[11],steer:g[12],brakePressure:g[13],jumpCharge:g[14],landingImpact:g[16]},0,0,g[8])}
-function syncPlayer(dt=0,throttle=0){
- if(!player)return;
- const heave=(bike.frontCompression+bike.rearCompression)*.5;
- player.position.set(bike.x,bike.y-heave,bike.z);player.rotation.set(0,bike.yaw,0);player.rotateX(bike.pitch+(bike.rearCompression-bike.frontCompression)*.5);player.rotateZ(bike.lean);
- if(frontWheel){frontWheel.position.y=.42+heave;rearWheel.position.y=.42+heave;frontWheel.rotation.y=-bike.steer*.23;}
- if(frontFork){frontFork.scale.y=1-bike.frontCompression*.65;frontFork.rotation.y=-bike.steer*.1;}
- rigAccumulator+=dt;if(!touch||dt===0||rigAccumulator>=1/30){riderAnimator?.update(bike,rigAccumulator,Number(throttle));rigAccumulator=0;}
- if(shadow){shadow.position.set(bike.x,terrain.sample(bike.x,bike.z)+.13,bike.z);shadow.rotation.z=-bike.yaw;shadow.material.opacity=Math.max(0,.45-(bike.y-terrain.sample(bike.x,bike.z))*.12)}
- sun.position.set(bike.x-110,bike.y+170,bike.z+70);sun.target.position.set(bike.x,bike.y,bike.z);sun.target.updateMatrixWorld();
+function buildMarkers() {
+  const mat = new THREE.MeshStandardMaterial({
+    color: '#dfe8bb',
+    roughness: 1,
+    emissive: '#99ab72',
+    emissiveIntensity: 0.08,
+    side: THREE.DoubleSide,
+  });
+  for (let i = 28; i < trail.points.length - 10; i += 65) {
+    const p = trail.points[i],
+      q = trail.points[i + 4],
+      angle = Math.atan2(q[0] - p[0], q[2] - p[2]),
+      shape = new THREE.Shape();
+    shape.moveTo(0, 0.6);
+    shape.lineTo(-0.48, -0.24);
+    shape.lineTo(-0.29, -0.37);
+    shape.lineTo(0, 0.13);
+    shape.lineTo(0.29, -0.37);
+    shape.lineTo(0.48, -0.24);
+    shape.closePath();
+    const geo = new THREE.ShapeGeometry(shape);
+    geo.rotateX(-Math.PI / 2);
+    const mark = new THREE.Mesh(geo, mat);
+    mark.position.set(p[0], p[1] + 0.04, p[2]);
+    mark.rotation.y = angle;
+    scene.add(mark);
+  }
 }
-function heroCamera(dt,instant=false){heroTime+=dt;const angle=.55+Math.sin(heroTime*.07)*.11;const dist=8.1;desired.set(bike.x+Math.sin(angle)*dist,bike.y+2.65,bike.z+Math.cos(angle)*dist);desired.y=Math.max(desired.y,terrain.sample(desired.x,desired.z)+1.8);if(instant)camera.position.copy(desired);else camera.position.lerp(desired,1-Math.exp(-dt*2));tmp.set(bike.x-2.6,bike.y+1.2,bike.z-1);camera.lookAt(tmp)}
-function rideCamera(dt,instant=false){rideView.update(camera,bike,trail,nearestIndex,terrain,collisions,dt,cameraFar,instant)}
-function startRun(){if(!ready)return;closePanel();bike.reset();tracker.reset();ghostRecord=[];runSplits=[];nearestIndex=0;riderAnimator.phase=0;skidMarks?.reset();feedback.reset();show('performance-hud',showPerformance);show('split-feedback',false);ghostIndex=0;lastGhostT=-1;crashes=0;elapsed=0;lastLandingSerial=0;runAir=0;totalAir=0;crashShown=false;keys.clear();touchSteer=0;touchWeight=0;touchBrake=0;touchJumpHeld=false;show('crash',false);show('menu',false);show('header',false);show('hud',true);show('minimap',true);show('touch',touch);$('run-mode').textContent=mode==='race'?'ZEITFAHREN / '+selected.number:'FREIE FAHRT / '+selected.label.toUpperCase();$('vignette').style.opacity='.17';state='countdown';accumulator=0;syncPlayer();rideCamera(0,true);updateHud();if(ghostMesh)ghostMesh.visible=false;if(soundEnabled)ensureAudio();let n=3;$('countdown').textContent=n;show('countdown',true);const interval=setInterval(()=>{if(state!=='countdown'){clearInterval(interval);return}n--;if(n>0){$('countdown').textContent=n;beep(370,.07)}else{clearInterval(interval);show('countdown',false);state='riding';beep(740,.15);toast(touch?'LENKEN LINKS · SPRUNG HALTEN & LOSLASSEN':'RIDE V4 · SPACE HALTEN & LOSLASSEN');lastTime=performance.now()}},800)}
-function respawn(){bike.reset(tracker.respawnIndex);feedback.reset();skidMarks.previous=null;tracker.nearest=tracker.respawnIndex;nearestIndex=tracker.respawnIndex;crashes++;elapsed+=mode==='race'?3:0;show('crash',false);state='riding';crashShown=false;keys.clear();touchSteer=0;touchWeight=0;touchBrake=0;touchJumpHeld=false;syncPlayer();rideCamera(0,true);toast(mode==='race'?'+3 SEKUNDEN · WEITER GEHT’S':'ZURÜCK AM CHECKPOINT')}
-function crash(){if(crashShown)return;crashShown=true;state='crashed';keys.clear();show('hop-charge',false);show('touch',false);show('crash',true);if(audio){audio.mute();if(soundEnabled)audio.impact(10,true)}}
-function pause(){if(state!=='riding'&&state!=='paused')return;if(state==='paused'){closePanel();return}state='paused';keys.clear();bike.jumpCharge=0;bike._jumpHeld=false;touchBrake=0;touchSteer=0;touchWeight=0;touchJumpHeld=false;show('touch',false);dialog(`<span class="micro">DURCHATMEN</span><h2>Der Berg wartet.</h2><p>Dein Run ist pausiert. Gleich geht es auf deiner Linie weiter.</p><button id="resume" class="primary">WEITERFAHREN <span>↗</span></button><button id="restart" class="secondary">RUN NEU STARTEN</button><button id="exit-run" class="secondary">ZUM HAUPTMENÜ</button>`,()=>{if(state==='paused'){state='riding';show('touch',touch);lastTime=performance.now()}});$('resume').onclick=closePanel;$('restart').onclick=startRun;$('exit-run').onclick=()=>{state='menu';closePanel();showMenu()}}
-function finish(){state='finished';show('touch',false);recordGhost();const isBest=mode==='race'&&(!runBest||elapsed<runBest);if(isBest){runBest=elapsed;storage.set(records.best,elapsed);ghostSaved=ghostRecord;bestSplits=runSplits.slice();storage.set(records.splits,bestSplits);storage.set(records.ghost,ghostSaved);buildGhost();}const thresholds=trail.medals||[145,200];let medal=elapsed<thresholds[0]?'GOLD':elapsed<thresholds[1]?'SILBER':'BRONZE';dialog(`<span class="micro">${selected.title.toUpperCase()} / GESCHAFFT</span><h2>Unten angekommen.</h2><div class="finish-time">${formatTime(elapsed)}</div><span class="medal">${mode==='race'?(isBest?'NEUE BESTZEIT · ':'')+medal:'FREIE FAHRT'}</span><div class="finish-stats"><div><b>${Math.round(bike.maxSpeed)}</b><span>KM/H MAX</span></div><div><b>${totalAir.toFixed(1)} s</b><span>AIR TIME</span></div><div><b>${crashes}</b><span>NEUSTARTS</span></div></div><button id="again" class="primary">NOCH EINE ABFAHRT <span>↗</span></button><button id="back-menu" class="secondary">ZUM HAUPTMENÜ</button>`,()=>{if(state==='finished')showMenu()});$('again').onclick=startRun;$('back-menu').onclick=()=>{closePanel();showMenu()}}
-function updateHud(){const speed=Math.round(bike.speed*3.6);$('speed').textContent=speed.toString().padStart(2,'0');$('altitude').textContent=Math.round(bike.y+region.heightOrigin)+' M';$('timer').textContent=formatTime(elapsed);$('progress').style.width=(nearestIndex/(trail.points.length-1)*100)+'%';$('checkpoint-label').textContent=`CHECKPOINT ${Math.min(tracker.next,trail.checkpoints.length).toString().padStart(2,'0')} / ${trail.checkpoints.length.toString().padStart(2,'0')}`;show('airtime',bike.air&&bike.airtime>.25);if(bike.air)$('airtime').querySelector('b').textContent=bike.airtime.toFixed(1);$('surface-label').textContent=bike.surface.name.toUpperCase();$('surface-label').dataset.loose=bike.surface.grip<.8?'yes':'no';
- show('hop-charge',bike.jumpCharge>.04&&!bike.air);$('hop-fill').style.width=(bike.jumpCharge*100)+'%';$('touch-jump').style.setProperty('--charge',bike.jumpCharge*100+'%');drawMap();updateNavigation()}
-function drawMap(){
- const stamp=performance.now();if(stamp-mapLast<80)return;mapLast=stamp;const ctx=$('minimap').getContext('2d'),points=trail.points;ctx.clearRect(0,0,240,240);ctx.strokeStyle='#dce5bd88';ctx.lineWidth=3;ctx.lineCap='round';ctx.beginPath();points.forEach((p,i)=>{const [x,y]=mapTransform(p);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});ctx.stroke();ctx.strokeStyle='#f38a59';ctx.beginPath();for(let i=0;i<=nearestIndex;i++){const [x,y]=mapTransform(points[i]);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)}ctx.stroke();const cp=points[trail.checkpoints[Math.min(tracker.next,trail.checkpoints.length-1)]],[cx,cy]=mapTransform(cp);ctx.fillStyle='#f27344';ctx.beginPath();ctx.arc(cx,cy,5,0,Math.PI*2);ctx.fill();const [x,y]=mapTransform([bike.x,0,bike.z]);ctx.save();ctx.translate(x,y);ctx.rotate(-bike.yaw);ctx.fillStyle='#f2f4dd';ctx.beginPath();ctx.moveTo(0,-8);ctx.lineTo(5,6);ctx.lineTo(0,3);ctx.lineTo(-5,6);ctx.closePath();ctx.fill();ctx.restore();
+function buildParticles() {
+  const count = 130;
+  particlePositions = new Float32Array(count * 3);
+  particleVelocity = new Float32Array(count * 3);
+  particleLife = new Float32Array(count);
+  particleColors = new Float32Array(count * 3);
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(particlePositions, 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+  const tex = softDisc();
+  particles = new THREE.Points(
+    geo,
+    new THREE.PointsMaterial({
+      size: 0.23,
+      map: tex,
+      transparent: true,
+      opacity: 0.32,
+      depthWrite: false,
+      vertexColors: true,
+      color: '#dac2a1',
+    })
+  );
+  particles.frustumCulled = false;
+  scene.add(particles);
 }
-function buildWaypoint(){
- const beam=new THREE.Mesh(new THREE.CylinderGeometry(.65,.65,8,12,1,true),new THREE.MeshBasicMaterial({color:'#ff9764',transparent:true,opacity:.09,depthWrite:false,side:THREE.DoubleSide}));const ring=new THREE.Mesh(new THREE.TorusGeometry(1.7,.065,8,40),new THREE.MeshBasicMaterial({color:'#ffd6a0',transparent:true,opacity:.9,depthWrite:false}));ring.rotation.x=-Math.PI/2;waypoint=new THREE.Group();beam.position.y=4;ring.position.y=.18;waypoint.add(beam,ring);waypoint.visible=false;scene.add(waypoint);
+function updateParticles(dt) {
+  for (let i = 0; i < particleLife.length; i++) {
+    particleLife[i] -= dt;
+    const k = i * 3;
+    if (particleLife[i] > 0) {
+      particlePositions[k] += particleVelocity[k] * dt;
+      particlePositions[k + 1] += particleVelocity[k + 1] * dt;
+      particlePositions[k + 2] += particleVelocity[k + 2] * dt;
+      const a = particleLife[i] / 1.2;
+      particleColors[k] = particleColors[k + 1] = particleColors[k + 2] = a;
+    } else particlePositions[k + 1] = -1000;
+  }
+  if (state === 'riding' && !bike.air && bike.speed > 5) {
+    const i = particleCursor++ % particleLife.length,
+      k = i * 3;
+    particleLife[i] = 1.2;
+    particlePositions[k] = bike.x + Math.sin(bike.yaw) * 0.7;
+    particlePositions[k + 1] = bike.y + 0.12;
+    particlePositions[k + 2] = bike.z + Math.cos(bike.yaw) * 0.7;
+    particleVelocity[k] = (Math.random() - 0.5) * 1.2;
+    particleVelocity[k + 1] = 0.4 + Math.random() * 0.5;
+    particleVelocity[k + 2] = (Math.random() - 0.5) * 1.2;
+  }
+  particles.geometry.attributes.position.needsUpdate = true;
+  particles.geometry.attributes.color.needsUpdate = true;
 }
-function updateNavigation(){
- const index=trail.checkpoints[Math.min(tracker.next,trail.checkpoints.length-1)],p=trail.points[index],distance=Math.hypot(p[0]-bike.x,p[2]-bike.z),bearing=Math.atan2(-(p[0]-bike.x),-(p[2]-bike.z));$('waypoint-arrow').style.transform=`rotate(${-wrapAngle(bearing-bike.yaw)*180/Math.PI}deg)`;$('waypoint-distance').textContent=`CP ${Math.min(tracker.next+1,trail.checkpoints.length).toString().padStart(2,'0')} · ${Math.round(distance)} m`;waypoint.position.set(p[0],p[1],p[2]);waypoint.visible=!tracker.complete;
- const reference=ghostTrace.timeAtProgress(nearestIndex/(trail.points.length-1));$('ghost-gap').textContent=reference===null?'GEIST · ERSTER RUN':'GEIST '+(elapsed-reference>=0?'+':'−')+Math.abs(elapsed-reference).toFixed(2)+' s';$('ghost-gap').dataset.ahead=reference!==null&&elapsed<reference?'yes':'no';
+function buildGhost() {
+  if (ghostMesh) {
+    scene.remove(ghostMesh);
+    ghostMesh.traverse(o => {
+      if (o.isMesh) o.material.dispose();
+    });
+    ghostMesh = null;
+  }
+  ghostTrace = new ReplayTrack(ghostSaved || []);
+  if (!ghostSaved?.length) return;
+  ghostMesh = cloneSkeleton(ghostTemplate);
+  ghostMesh.traverse(o => {
+    if (o.isMesh) {
+      o.material = new THREE.MeshBasicMaterial({
+        color: '#d9edce',
+        transparent: true,
+        opacity: 0.2,
+        depthWrite: false,
+      });
+      o.castShadow = false;
+      o.frustumCulled = false;
+    }
+  });
+  ghostParts = {
+    front: ghostMesh.getObjectByName('WheelFrontPivot'),
+    rear: ghostMesh.getObjectByName('WheelRearPivot'),
+    fork: ghostMesh.getObjectByName('SuspensionForkPivot'),
+  };
+  ghostAnimator = new RiderAnimator(ghostMesh, ghostMesh.getObjectByName('RiderVisual'), {
+    crank: ghostMesh.getObjectByName('CrankPivot'),
+    pedalL: ghostMesh.getObjectByName('PedalL'),
+    pedalR: ghostMesh.getObjectByName('PedalR'),
+    handlebar: ghostMesh.getObjectByName('HandlebarPivot'),
+  });
+  ghostMesh.visible = false;
+  scene.add(ghostMesh);
 }
-function checkpointSplit(){
- const slot=tracker.next-2,reference=bestSplits[slot],difference=reference===undefined?null:elapsed-reference;runSplits[slot]=elapsed;$('split-time').textContent=formatTime(elapsed);$('split-gap').textContent=difference===null?'ERSTE ZWISCHENZEIT':(difference>=0?'+':'−')+Math.abs(difference).toFixed(2)+' s ZUM BESTEN RUN';$('split-feedback').dataset.ahead=difference!==null&&difference<0?'yes':'no';show('split-feedback',true);clearTimeout(checkpointSplit.timeout);checkpointSplit.timeout=setTimeout(()=>show('split-feedback',false),4200);
+function recordGhost() {
+  ghostRecord.push([
+    +elapsed.toFixed(3),
+    +bike.x.toFixed(3),
+    +bike.y.toFixed(3),
+    +bike.z.toFixed(3),
+    bike.yaw,
+    bike.pitch,
+    bike.lean,
+    nearestIndex / (trail.points.length - 1),
+    riderAnimator.phase,
+    bike.weight,
+    bike.frontCompression,
+    bike.rearCompression,
+    bike.steer,
+    bike.brakePressure,
+    bike.jumpCharge,
+    frontWheel?.rotation.x || 0,
+    bike.landingImpact,
+  ]);
+  lastGhostT = elapsed;
 }
-function ensureAudio(){if(audio){audio.resume();return}try{audio=new RideAudio();audio.resume()}catch{soundEnabled=false}}
-function beep(freq,duration){if(!soundEnabled)return;ensureAudio();audio?.beep(freq,duration)}
-function updateAudio(){audio?.update(bike,state==='riding'&&soundEnabled,Number(input.throttle))}
-function toggleSound(){soundEnabled=!soundEnabled;storage.set('sound',soundEnabled);if(soundEnabled)ensureAudio();$('sound-toggle').textContent=soundEnabled?'TON AN':'TON AUS';toast(soundEnabled?'SOUND AN':'SOUND AUS')}
-function animate(now){requestAnimationFrame(animate);const rawDt=(now-lastTime)/1000||0;lastTime=now;if(document.hidden)return;const dt=Math.min(.06,rawDt);
- if(state==='riding'){
-  input.steer=touchSteer+(keys.has('KeyD')||keys.has('ArrowRight')?1:0)-(keys.has('KeyA')||keys.has('ArrowLeft')?1:0);
-  input.throttle=(autoPedal&&bike.speed<8.5)||keys.has('KeyW')||keys.has('ArrowUp');
-  input.brake=Math.max(touchBrake,keys.has('KeyS')||keys.has('ArrowDown')?1:0);input.rearBrake=keys.has('KeyV')?1:0;
-  input.weight=clamp(touchWeight+(keys.has('ShiftLeft')||keys.has('ShiftRight')?1:0)-(keys.has('KeyX')?1:0),-1,1);
-  input.jumpHeld=touchJumpHeld||keys.has('Space');input.jump=false;input.sensitivity=sensitivity;
-  const pad=navigator.getGamepads?.()?.find(p=>p?.connected);if(pad){const axis=pad.axes[0]||0;input.steer+=Math.abs(axis)>.12?Math.sign(axis)*(Math.abs(axis)-.12)/.88:0;input.weight=clamp(input.weight-(pad.axes[1]||0),-1,1);input.throttle=Math.max(Number(input.throttle),pad.buttons[7]?.value||0);input.brake=Math.max(input.brake,pad.buttons[6]?.value||0);input.jumpHeld||=!!pad.buttons[0]?.pressed;}
-  accumulator+=dt;let iterations=0;while(accumulator>=1/120&&iterations++<9){bike.step(1/120,input);elapsed+=1/120;accumulator-=1/120;collisions.collideBike(bike);if(bike.crashed){crash();break}}
-  const progress=tracker.update(bike.x,bike.z);nearestIndex=progress.index;nearDistance=progress.distance;
-  if(progress.crossed){checkpointSplit();beep(620,.08);toast(progress.complete?'FINISH':'CHECKPOINT '+(tracker.next-1).toString().padStart(2,'0'));if(progress.complete&&state==='riding'&&mode==='race')finish()}
-  if(bike.air)runAir=bike.airtime;else if(runAir){totalAir+=runAir;if(runAir>.45&&bike.landingQuality==='smooth')toast('SAUBERE LANDUNG · FLOW');runAir=0}
-  if(bike.atBoundary&&frameCount%180===0)toast('GEBIETSGRENZE · WENDE DEIN BIKE');
-  if(state==='riding'&&elapsed-lastGhostT>.1)recordGhost();updateGhost();
-  if(frontWheel){frontWheel.rotation.x-=bike.speed*dt/.42;rearWheel.rotation.x-=bike.speed*dt/.42*(1-input.rearBrake*.85)}
-  bike.visualImpact=feedback.update(bike,dt,soundEnabled?audio:null);skidMarks.update(bike,elapsed);syncPlayer(dt,input.throttle);rideCamera(dt);updateHud();
- }else if(state==='menu')heroCamera(dt);else if(state==='countdown')rideCamera(dt);
- worldV2?.update(camera,bike,now/1000);updateParticles(dt);updateAudio();renderer.shadowMap.needsUpdate=frameCount%(touch||frameBudget.level>1?2:1)===0;renderer.render(scene,camera);frameCount++;frameTotal+=dt;if(frameCount%60===0){document.documentElement.dataset.version=ASSET_VERSION;document.documentElement.dataset.region=selected.id;document.documentElement.dataset.line=selected.line;document.documentElement.dataset.sourceStep=String(region.step);document.documentElement.dataset.rigged='true';document.documentElement.dataset.setup=setupSignature(bikeSetup);document.documentElement.dataset.x=bike.x.toFixed(1);document.documentElement.dataset.z=bike.z.toFixed(1);document.documentElement.dataset.offTrail=nearDistance.toFixed(1);document.documentElement.dataset.skidMarks=String(skidMarks?.count||0);document.documentElement.dataset.audio=audio?audio.ctx.state:'off';document.documentElement.dataset.detailVersion='3';document.documentElement.dataset.colliders=String(collisions.objects.length);document.documentElement.dataset.fps=String(frameBudget.last?.fps||Math.round(60/frameTotal));document.documentElement.dataset.triangles=String(renderer.info.render.triangles);frameTotal=0;}
- const measured=frameBudget.push(rawDt,state==='riding'&&!document.hidden);if(measured){if(measured.change){renderer.setPixelRatio(Math.max(.7,baseDpr*Math.pow(.84,measured.level)));renderer.setSize(innerWidth,innerHeight);worldV2.setBudget(measured.level)}const record={...measured,quality,region:selected.id,line:selected.line,triangles:renderer.info.render.triangles,drawCalls:renderer.info.render.calls,dpr:+renderer.getPixelRatio().toFixed(2)};storage.set('performance.'+selected.id+'.'+quality,record);$('performance-hud').textContent=`${measured.fps} FPS · P95 ${measured.p95Ms} ms`;document.documentElement.dataset.fps=String(measured.fps);document.documentElement.dataset.p95=String(measured.p95Ms);document.documentElement.dataset.budget=String(measured.level);}
-
+function updateGhost() {
+  if (!ghostMesh || mode !== 'race') return;
+  const g = ghostTrace.sample(elapsed);
+  ghostMesh.visible = !!g;
+  if (!g) return;
+  const heave = (g[10] + g[11]) * 0.5;
+  ghostMesh.position.set(g[1], g[2] - heave, g[3]);
+  ghostMesh.rotation.set(0, g[4], 0);
+  ghostMesh.rotateX(g[5] + (g[11] - g[10]) * 0.5);
+  ghostMesh.rotateZ(g[6]);
+  if (ghostParts.front) {
+    ghostParts.front.position.y = ghostParts.rear.position.y = 0.42 + heave;
+    ghostParts.front.rotation.y = -g[12] * 0.23;
+    ghostParts.front.rotation.x = ghostParts.rear.rotation.x = g[15];
+  }
+  if (ghostParts.fork) {
+    ghostParts.fork.scale.y = 1 - g[10] * 0.65;
+    ghostParts.fork.rotation.y = -g[12] * 0.1;
+  }
+  ghostAnimator.update(
+    {
+      speed: 0,
+      weight: g[9],
+      lean: g[6],
+      frontCompression: g[10],
+      rearCompression: g[11],
+      steer: g[12],
+      brakePressure: g[13],
+      jumpCharge: g[14],
+      landingImpact: g[16],
+    },
+    0,
+    0,
+    g[8]
+  );
 }
-function regionPanel(){dialog(`<span class="micro">SWISS TERRAIN SERIES / ${selected.number}</span><h2>${selected.label}.<br>Deine eigene Linie.</h2><p>${selected.id==='lenzerheide'?'Von Scharmoin hinunter Richtung Rothorn-Talstation. Alpine Flow führt über offene Hänge und durch Nadelwald; Roots Line nimmt die kürzere, technische Variante.':'Das Uetliberg-Massiv über Zürich, als vollständig vorbereitetes 3D-Gelände.'} ${((region.bounds[2]-region.bounds[0])*(region.bounds[3]-region.bounds[1])/1e6).toFixed(1)} km² befahrbares Gelände, Höhen aus swissALTI3D und Luftbilder aus SWISSIMAGE.${selected.id==='lenzerheide'?' Dazu kommt das vorab modellierte Bergpanorama.':''}</p><p>Die ${(Math.round(trail.length/10)/100).toFixed(2)} km lange ${selected.title}-Abfahrt ist für dieses Spiel gestaltet. Sie bildet keine offizielle Bikepark-Linie nach und dient nicht als reale Navigation.</p><p>Das Gelände wurde aus lokal heruntergeladenen Daten in Blender gebaut. Während deiner Fahrt werden keine Karten oder Geodaten gestreamt.</p><p><a href="https://www.swisstopo.admin.ch/de/hoehenmodell-swissalti3d" target="_blank" rel="noopener">Höhendaten</a> · <a href="https://www.swisstopo.admin.ch/de/orthobilder-swissimage-10-cm" target="_blank" rel="noopener">Luftbilder</a> · <a href="${asset('sources.json')}" target="_blank" rel="noopener">Datenstände und Quellen</a><br>©swisstopo · Lokaler Datenstand ${region.sourceSnapshot}</p><p>Vegetation und PBR-Materialien: <a href="https://polyhaven.com/" target="_blank" rel="noopener">Poly Haven</a> · CC0. <a href="${asset('art-sources.json')}" target="_blank" rel="noopener">Materialquellen</a>.</p><p><a href="https://github.com/Trapanotto/downhill" target="_blank" rel="noopener">Spiel und Quellcode: Trapanotto/downhill</a></p>`)}
-function controlsPanel(){dialog(`<span class="micro">DEIN BIKE. DEINE KONTROLLE.</span><h2>Finde deinen Flow.</h2><div class="controls"><p><b>W / ↑</b>Treten</p><p><b>S / ↓</b>Bremsen</p><p><b>A D / ← →</b>Lenken</p><p><b>Leertaste</b>Halten: vorspannen · loslassen: springen</p><p><b>R</b>Zum Checkpoint (+3 s)</p><p><b>Shift / X</b>Gewicht vor / zurück</p><p><b>V</b>Hinterradbremse</p><p><b>C / P / M</b>Kamera / Pause / Sound</p></div><p>Gamepad: linker Stick lenkt und verlagert das Gewicht, RT tritt, LT bremst dosiert. A halten und loslassen: springen. Auf dem Smartphone: links lenken; den Daumen vor/zurück bewegen für Gewichtsverlagerung. Rechts bremsen, für mehr Bremskraft nach oben ziehen. Sprung halten und loslassen. Autopedal lässt sich in den Optionen einstellen.</p><p>Du kannst die markierte Linie verlassen und das ganze vorbereitete Gebiet frei befahren. R setzt dich nur auf deinen Befehl zurück. Im Zeitfahren müssen die Checkpoints der Reihe nach passiert werden. Deine Bestzeit und dein Geist bleiben auf diesem Gerät gespeichert.</p>${touch?'<span class="portrait-tip">Tipp: Drehe dein Smartphone ins Querformat für mehr Sicht auf die Strecke.</span>':''}`)}
-function settingsPanel(){dialog(`<span class="micro">DEIN SETUP</span><h2>Bereit für den Berg.</h2><label>Grafik<select id="quality"><option value="high">Ultra · 4K-Texturen</option><option value="balanced">Ausgewogen</option><option value="mobile">Mobil · 2K-Texturen</option></select></label><label>Lenkempfindlichkeit<input id="sensitivity" type="range" min="0.5" max="1.5" value="${sensitivity}" step=".1"></label><label>Leistungsanzeige<input id="performance-setting" type="checkbox" ${showPerformance?'checked':''}></label><label>Automatisch treten<input id="autopedal" type="checkbox" ${autoPedal?'checked':''}></label><label>Natur- und Fahrgeräusche<input id="audio-setting" type="checkbox" ${soundEnabled?'checked':''}></label><p>Grafikwechsel lädt das vorbereitete Gebiet neu. Die Bildauflösung passt sich bei Bedarf automatisch an die Leistung deines Geräts an.</p><button id="performance-report" class="secondary">MESSWERTE ANZEIGEN</button><button id="offline-save" class="secondary">SPIEL OFFLINE SPEICHERN</button><p id="offline-status" role="status"></p><button id="apply" class="primary">EINSTELLUNGEN ÜBERNEHMEN <span>↗</span></button>`);$('quality').value=quality;$('apply').onclick=()=>{const next=$('quality').value;storage.set('quality',next);sensitivity=+$('sensitivity').value;storage.set('sensitivity',sensitivity);showPerformance=$('performance-setting').checked;storage.set('show-performance',showPerformance);autoPedal=$('autopedal').checked;storage.set('autoPedal',autoPedal);soundEnabled=$('audio-setting').checked;storage.set('sound',soundEnabled);if(soundEnabled)ensureAudio();$('sound-toggle').textContent=soundEnabled?'TON AN':'TON AUS';if(next!==quality)location.reload();else closePanel()};$('offline-save').onclick=saveOffline;$('performance-report').onclick=performancePanel}
-function bikePanel(){if(state!=='menu')return;let draft={...bikeSetup};dialog(`<span class="micro">DEIN BIKE</span><h2>Stimme deinen Ride ab.</h2><div class="setup-presets">${Object.entries(SETUP_PRESETS).map(([id,p])=>`<button data-preset="${id}">${p.label}</button>`).join('')}</div><p id="setup-description"></p><label>Federung <output id="suspension-value"></output><input id="setup-suspension" type="range" min="0" max="100" step="5" value="${draft.suspension*100}" aria-label="Federung"></label><small class="setup-scale">Straff / direkt <span>Weich / komfortabel</span></small><label>Reifengrip <output id="tyres-value"></output><input id="setup-tyres" type="range" min="0" max="100" step="5" value="${draft.tyres*100}" aria-label="Reifengrip"></label><small class="setup-scale">Leicht rollend <span>Griffig / mehr Widerstand</span></small><label>Bremskraft <output id="brakes-value"></output><input id="setup-brakes" type="range" min="0" max="100" step="5" value="${draft.brakes*100}" aria-label="Bremskraft"></label><small class="setup-scale">Sanft dosiert <span>Kräftig / schneller am Griplimit</span></small><p>Mehr Grip erhöht auch den Rollwiderstand. Eine weichere Federung federt stärker ein. Bestzeit und Geist werden für jede Abstimmung separat geführt.</p><button id="save-bike" class="primary">ABSTIMMUNG SPEICHERN <span>↗</span></button>`);
- const refresh=()=>{for(const key of ['suspension','tyres','brakes']){$('setup-'+key).value=draft[key]*100;$(key+'-value').textContent=Math.round(draft[key]*100)+' %'}for(const button of $('panel-content').querySelectorAll('[data-preset]')){const active=setupSignature(SETUP_PRESETS[button.dataset.preset])===setupSignature(draft);button.classList.toggle('selected',active);button.setAttribute('aria-pressed',String(active))}$('setup-description').textContent=setupLabel(draft)+' · '+(draft.suspension>.6?'Komfort auf Wurzeln und Landungen.':draft.suspension<.4?'Direkte Rückmeldung und straffe Federung.':'Vielseitige Abstimmung für alle drei Routen.')};
- for(const key of ['suspension','tyres','brakes'])$('setup-'+key).oninput=()=>{draft[key]=+$('setup-'+key).value/100;refresh()};for(const button of $('panel-content').querySelectorAll('[data-preset]'))button.onclick=()=>{draft=normalizeSetup(SETUP_PRESETS[button.dataset.preset]);refresh()};refresh();$('save-bike').onclick=()=>{bikeSetup=normalizeSetup(draft);storage.set('bike-setup',bikeSetup);records=recordKeys(selected,bikeSetup);runBest=storage.get(records.best,null);ghostSaved=storage.get(records.ghost,null);bestSplits=storage.get(records.splits,[]);bike.setSetup(bikeSetup);bike.reset();tracker.reset();nearestIndex=0;feedback.reset();syncPlayer();buildGhost();refreshBest();$('bike-setup-label').textContent=setupLabel(bikeSetup);closePanel()};}
-function performancePanel(){const r=storage.get('performance.'+selected.id+'.'+quality,null);dialog(`<span class="micro">DEIN GERÄT / AKTUELLES GRAFIKPROFIL</span><h2>So läuft dein Ride.</h2>${r?`<div class="performance-stats"><div><strong>${r.fps}</strong><span>FPS IM MITTEL</span></div><div><strong>${r.p95Ms}<small> ms</small></strong><span>95 % DER FRAMES</span></div></div><p>${selected.label} · ${quality==='high'?'Ultra':quality==='mobile'?'Mobil':'Ausgewogen'}<br>${Math.round(r.triangles/1000)} Tausend Dreiecke · ${r.drawCalls} Zeichenaufrufe<br>Renderfaktor ${r.dpr} · Anpassungsstufe ${r.level}/3</p><p>Gemessen während der Fahrt auf diesem Gerät. P95 zeigt die langsameren Frames: kleinere Werte bedeuten gleichmässigere Darstellung. Die Automatik reduziert bei längerer hoher Last Auflösung und Vegetationsdetails.</p>`:'<p>Fahre mindestens drei Sekunden, um Messwerte für dieses Grafikprofil zu sammeln. Unter Optionen kannst du die Leistungsanzeige während der Fahrt einschalten.</p>'}<button id="back-settings" class="primary">ZURÜCK ZU OPTIONEN <span>↗</span></button>`);$('back-settings').onclick=settingsPanel;}
-async function saveOffline(){const button=$('offline-save'),status=$('offline-status');button.disabled=true;status.textContent='Das gesamte Spielpaket wird auf diesem Gerät gespeichert …';try{if(!('serviceWorker'in navigator))throw Error('Dieser Browser unterstützt keine Offline-Speicherung.');const reg=await navigator.serviceWorker.register(base+'sw.js');await navigator.serviceWorker.ready;const worker=reg.installing||reg.waiting||reg.active;if(worker.state!=='activated')await new Promise((resolve,reject)=>{const timeout=setTimeout(()=>reject(Error('Offline-Modul konnte nicht aktiviert werden.')),45000);const check=()=>{if(worker.state==='activated'){clearTimeout(timeout);worker.removeEventListener('statechange',check);resolve()}else if(worker.state==='redundant'){clearTimeout(timeout);reject(Error('Bitte Seite neu laden und erneut speichern.'))}};worker.addEventListener('statechange',check);check()});await new Promise((resolve,reject)=>{const channel=new MessageChannel(),timeout=setTimeout(()=>reject(Error('Zeitüberschreitung beim Speichern. Bitte online erneut versuchen.')),120000);channel.port1.onmessage=e=>{clearTimeout(timeout);e.data.ok?resolve():reject(Error(e.data.error))};worker.postMessage({type:'CACHE_GAME'},[channel.port2])});status.textContent='Bereit. Du kannst das Spiel jetzt auch ohne Internet öffnen.';button.textContent='OFFLINE GESPEICHERT ✓'}catch(e){status.textContent=e.message;button.disabled=false}}
-$('panel-close').onclick=closePanel;$('panel').addEventListener('click',e=>{if(e.target===$('panel')){const b=$('panel').getBoundingClientRect();if(e.clientX<b.left||e.clientX>b.right||e.clientY<b.top||e.clientY>b.bottom)closePanel()}});
-$('bike-setup').onclick=bikePanel;
-$('nav-ride').onclick=()=>{closePanel();if(state==='menu')chooseMode('race')};$('nav-region').onclick=regionPanel;$('nav-settings').onclick=settingsPanel;$('help-open').onclick=controlsPanel;$('home').onclick=()=>{closePanel();showMenu()};$('start').onclick=startRun;$('mode-race').onclick=()=>chooseMode('race');$('mode-free').onclick=()=>chooseMode('free');$('pause').onclick=pause;$('camera').onclick=()=>{cameraFar=!cameraFar;toast(cameraFar?'KAMERA · WEIT':'KAMERA · NAH')};$('sound-toggle').onclick=toggleSound;$('sound-toggle').textContent=soundEnabled?'TON AN':'TON AUS';$('respawn').onclick=()=>{respawn();show('touch',touch)};
-window.addEventListener('keydown',e=>{if(['Space','Escape','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();if(e.repeat)return;if(state==='riding'){keys.add(e.code);if(e.code==='KeyR'){respawn();show('touch',touch)}if(e.code==='KeyC')$('camera').click();if(e.code==='KeyM')toggleSound();if(e.code==='KeyP'||e.code==='Escape')pause()}else if(state==='crashed'&&(e.code==='KeyR'||e.code==='Enter'||e.code==='Space')){respawn();show('touch',touch)}else if(state==='menu'&&e.code==='Enter'&&!$('panel').open)startRun()});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>{keys.clear();touchBrake=0;touchSteer=0;touchWeight=0;touchJumpHeld=false;if(state==='riding')pause()});document.addEventListener('visibilitychange',()=>{if(document.hidden&&state==='riding')pause()});window.addEventListener('resize',()=>{if(!renderer)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
-const steerPad=$('steer-pad');let steerPointer=null;
-function steerAt(e){const b=steerPad.getBoundingClientRect();const raw=clamp((e.clientX-b.left-b.width/2)/(b.width*.42),-1,1);touchSteer=Math.abs(raw)<.06?0:Math.sign(raw)*Math.pow((Math.abs(raw)-.06)/.94,1.22);touchWeight=clamp(-(e.clientY-b.top-b.height/2)/(b.height*.55),-1,1);$('steer-knob').style.transform=`translate(${touchSteer*30}px,${-touchWeight*24}px)`}
-steerPad.addEventListener('pointerdown',e=>{steerPointer=e.pointerId;steerPad.setPointerCapture(e.pointerId);steerAt(e)});steerPad.addEventListener('pointermove',e=>{if(e.pointerId===steerPointer)steerAt(e)});
-function clearSteer(){steerPointer=null;touchSteer=0;touchWeight=0;$('steer-knob').style.transform=''}
-for(const event of ['pointerup','pointercancel','lostpointercapture'])steerPad.addEventListener(event,clearSteer);
-let brakePointer=null,brakeOrigin=0;
-$('touch-brake').addEventListener('pointerdown',e=>{touchBrake=.68;brakeOrigin=e.clientY;brakePointer=e.pointerId;$('touch-brake').setPointerCapture(e.pointerId);$('touch-brake').style.setProperty('--brake','68%')});
-$('touch-brake').addEventListener('pointermove',e=>{if(e.pointerId===brakePointer){touchBrake=clamp(.68+(brakeOrigin-e.clientY)/90,.15,1);$('touch-brake').style.setProperty('--brake',touchBrake*100+'%')}});
-for(const ev of ['pointerup','pointercancel','lostpointercapture'])$('touch-brake').addEventListener(ev,()=>{touchBrake=0;brakePointer=null;$('touch-brake').style.setProperty('--brake','0%')});
-$('touch-jump').addEventListener('pointerdown',e=>{touchJumpHeld=true;$('touch-jump').setPointerCapture(e.pointerId)});
-for(const ev of ['pointerup','pointercancel','lostpointercapture'])$('touch-jump').addEventListener(ev,()=>touchJumpHeld=false);
+function syncPlayer(dt = 0, throttle = 0) {
+  if (!player) return;
+  const heave = (bike.frontCompression + bike.rearCompression) * 0.5;
+  player.position.set(bike.x, bike.y - heave, bike.z);
+  player.rotation.set(0, bike.yaw, 0);
+  player.rotateX(bike.pitch + (bike.rearCompression - bike.frontCompression) * 0.5);
+  player.rotateZ(bike.lean);
+  if (frontWheel) {
+    frontWheel.position.y = 0.42 + heave;
+    rearWheel.position.y = 0.42 + heave;
+    frontWheel.rotation.y = -bike.steer * 0.23;
+  }
+  if (frontFork) {
+    frontFork.scale.y = 1 - bike.frontCompression * 0.65;
+    frontFork.rotation.y = -bike.steer * 0.1;
+  }
+  rigAccumulator += dt;
+  if (!touch || dt === 0 || rigAccumulator >= 1 / 30) {
+    riderAnimator?.update(bike, rigAccumulator, Number(throttle));
+    rigAccumulator = 0;
+  }
+  if (shadow) {
+    shadow.position.set(bike.x, terrain.sample(bike.x, bike.z) + 0.13, bike.z);
+    shadow.rotation.z = -bike.yaw;
+    shadow.material.opacity = Math.max(0, 0.45 - (bike.y - terrain.sample(bike.x, bike.z)) * 0.12);
+  }
+  sun.position.set(bike.x - 110, bike.y + 170, bike.z + 70);
+  sun.target.position.set(bike.x, bike.y, bike.z);
+  sun.target.updateMatrixWorld();
+}
+function heroCamera(dt, instant = false) {
+  heroTime += dt;
+  const angle = 0.55 + Math.sin(heroTime * 0.07) * 0.11;
+  const dist = 8.1;
+  desired.set(bike.x + Math.sin(angle) * dist, bike.y + 2.65, bike.z + Math.cos(angle) * dist);
+  desired.y = Math.max(desired.y, terrain.sample(desired.x, desired.z) + 1.8);
+  if (instant) camera.position.copy(desired);
+  else camera.position.lerp(desired, 1 - Math.exp(-dt * 2));
+  tmp.set(bike.x - 2.6, bike.y + 1.2, bike.z - 1);
+  camera.lookAt(tmp);
+}
+function rideCamera(dt, instant = false) {
+  rideView.update(camera, bike, trail, nearestIndex, terrain, collisions, dt, cameraFar, instant);
+}
+function startRun() {
+  if (!ready) return;
+  closePanel();
+  bike.reset();
+  tracker.reset();
+  ghostRecord = [];
+  runSplits = [];
+  nearestIndex = 0;
+  riderAnimator.phase = 0;
+  skidMarks?.reset();
+  feedback.reset();
+  show('performance-hud', showPerformance);
+  show('split-feedback', false);
+  ghostIndex = 0;
+  lastGhostT = -1;
+  crashes = 0;
+  elapsed = 0;
+  lastLandingSerial = 0;
+  runAir = 0;
+  totalAir = 0;
+  crashShown = false;
+  keys.clear();
+  touchSteer = 0;
+  touchWeight = 0;
+  touchBrake = 0;
+  touchJumpHeld = false;
+  show('crash', false);
+  show('menu', false);
+  show('header', false);
+  show('hud', true);
+  show('minimap', true);
+  show('touch', touch);
+  $('run-mode').textContent =
+    mode === 'race' ? 'ZEITFAHREN / ' + selected.number : 'FREIE FAHRT / ' + selected.label.toUpperCase();
+  $('vignette').style.opacity = '.17';
+  state = 'countdown';
+  accumulator = 0;
+  syncPlayer();
+  rideCamera(0, true);
+  updateHud();
+  if (ghostMesh) ghostMesh.visible = false;
+  if (soundEnabled) ensureAudio();
+  let n = 3;
+  $('countdown').textContent = n;
+  show('countdown', true);
+  const interval = setInterval(() => {
+    if (state !== 'countdown') {
+      clearInterval(interval);
+      return;
+    }
+    n--;
+    if (n > 0) {
+      $('countdown').textContent = n;
+      beep(370, 0.07);
+    } else {
+      clearInterval(interval);
+      show('countdown', false);
+      state = 'riding';
+      beep(740, 0.15);
+      toast(touch ? 'LENKEN LINKS · SPRUNG HALTEN & LOSLASSEN' : 'RIDE V4 · SPACE HALTEN & LOSLASSEN');
+      lastTime = performance.now();
+    }
+  }, 800);
+}
+function respawn() {
+  bike.reset(tracker.respawnIndex);
+  feedback.reset();
+  skidMarks.previous = null;
+  tracker.nearest = tracker.respawnIndex;
+  nearestIndex = tracker.respawnIndex;
+  crashes++;
+  elapsed += mode === 'race' ? 3 : 0;
+  show('crash', false);
+  state = 'riding';
+  crashShown = false;
+  keys.clear();
+  touchSteer = 0;
+  touchWeight = 0;
+  touchBrake = 0;
+  touchJumpHeld = false;
+  syncPlayer();
+  rideCamera(0, true);
+  toast(mode === 'race' ? '+3 SEKUNDEN · WEITER GEHT’S' : 'ZURÜCK AM CHECKPOINT');
+}
+function crash() {
+  if (crashShown) return;
+  crashShown = true;
+  state = 'crashed';
+  keys.clear();
+  show('hop-charge', false);
+  show('touch', false);
+  show('crash', true);
+  if (audio) {
+    audio.mute();
+    if (soundEnabled) audio.impact(10, true);
+  }
+}
+function pause() {
+  if (state !== 'riding' && state !== 'paused') return;
+  if (state === 'paused') {
+    closePanel();
+    return;
+  }
+  state = 'paused';
+  keys.clear();
+  bike.jumpCharge = 0;
+  bike._jumpHeld = false;
+  touchBrake = 0;
+  touchSteer = 0;
+  touchWeight = 0;
+  touchJumpHeld = false;
+  show('touch', false);
+  dialog(
+    `<span class="micro">DURCHATMEN</span><h2>Der Berg wartet.</h2><p>Dein Run ist pausiert. Gleich geht es auf deiner Linie weiter.</p><button id="resume" class="primary">WEITERFAHREN <span>↗</span></button><button id="restart" class="secondary">RUN NEU STARTEN</button><button id="exit-run" class="secondary">ZUM HAUPTMENÜ</button>`,
+    () => {
+      if (state === 'paused') {
+        state = 'riding';
+        show('touch', touch);
+        lastTime = performance.now();
+      }
+    }
+  );
+  $('resume').onclick = closePanel;
+  $('restart').onclick = startRun;
+  $('exit-run').onclick = () => {
+    state = 'menu';
+    closePanel();
+    showMenu();
+  };
+}
+function finish() {
+  state = 'finished';
+  show('touch', false);
+  recordGhost();
+  const isBest = mode === 'race' && (!runBest || elapsed < runBest);
+  if (isBest) {
+    runBest = elapsed;
+    storage.set(records.best, elapsed);
+    ghostSaved = ghostRecord;
+    bestSplits = runSplits.slice();
+    storage.set(records.splits, bestSplits);
+    storage.set(records.ghost, ghostSaved);
+    buildGhost();
+  }
+  const thresholds = trail.medals || [145, 200];
+  let medal = elapsed < thresholds[0] ? 'GOLD' : elapsed < thresholds[1] ? 'SILBER' : 'BRONZE';
+  dialog(
+    `<span class="micro">${selected.title.toUpperCase()} / GESCHAFFT</span><h2>Unten angekommen.</h2><div class="finish-time">${formatTime(elapsed)}</div><span class="medal">${mode === 'race' ? (isBest ? 'NEUE BESTZEIT · ' : '') + medal : 'FREIE FAHRT'}</span><div class="finish-stats"><div><b>${Math.round(bike.maxSpeed)}</b><span>KM/H MAX</span></div><div><b>${totalAir.toFixed(1)} s</b><span>AIR TIME</span></div><div><b>${crashes}</b><span>NEUSTARTS</span></div></div><button id="again" class="primary">NOCH EINE ABFAHRT <span>↗</span></button><button id="back-menu" class="secondary">ZUM HAUPTMENÜ</button>`,
+    () => {
+      if (state === 'finished') showMenu();
+    }
+  );
+  $('again').onclick = startRun;
+  $('back-menu').onclick = () => {
+    closePanel();
+    showMenu();
+  };
+}
+function updateHud() {
+  const speed = Math.round(bike.speed * 3.6);
+  $('speed').textContent = speed.toString().padStart(2, '0');
+  $('altitude').textContent = Math.round(bike.y + region.heightOrigin) + ' M';
+  $('timer').textContent = formatTime(elapsed);
+  $('progress').style.width = (nearestIndex / (trail.points.length - 1)) * 100 + '%';
+  $('checkpoint-label').textContent =
+    `CHECKPOINT ${Math.min(tracker.next, trail.checkpoints.length).toString().padStart(2, '0')} / ${trail.checkpoints.length.toString().padStart(2, '0')}`;
+  show('airtime', bike.air && bike.airtime > 0.25);
+  if (bike.air) $('airtime').querySelector('b').textContent = bike.airtime.toFixed(1);
+  $('surface-label').textContent = bike.surface.name.toUpperCase();
+  $('surface-label').dataset.loose = bike.surface.grip < 0.8 ? 'yes' : 'no';
+  show('hop-charge', bike.jumpCharge > 0.04 && !bike.air);
+  $('hop-fill').style.width = bike.jumpCharge * 100 + '%';
+  $('touch-jump').style.setProperty('--charge', bike.jumpCharge * 100 + '%');
+  drawMap();
+  updateNavigation();
+}
+function drawMap() {
+  const stamp = performance.now();
+  if (stamp - mapLast < 80) return;
+  mapLast = stamp;
+  const ctx = $('minimap').getContext('2d'),
+    points = trail.points;
+  ctx.clearRect(0, 0, 240, 240);
+  ctx.strokeStyle = '#dce5bd88';
+  ctx.lineWidth = 3;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  points.forEach((p, i) => {
+    const [x, y] = mapTransform(p);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.stroke();
+  ctx.strokeStyle = '#f38a59';
+  ctx.beginPath();
+  for (let i = 0; i <= nearestIndex; i++) {
+    const [x, y] = mapTransform(points[i]);
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  const cp = points[trail.checkpoints[Math.min(tracker.next, trail.checkpoints.length - 1)]],
+    [cx, cy] = mapTransform(cp);
+  ctx.fillStyle = '#f27344';
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fill();
+  const [x, y] = mapTransform([bike.x, 0, bike.z]);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(-bike.yaw);
+  ctx.fillStyle = '#f2f4dd';
+  ctx.beginPath();
+  ctx.moveTo(0, -8);
+  ctx.lineTo(5, 6);
+  ctx.lineTo(0, 3);
+  ctx.lineTo(-5, 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+function buildWaypoint() {
+  const beam = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.65, 0.65, 8, 12, 1, true),
+    new THREE.MeshBasicMaterial({
+      color: '#ff9764',
+      transparent: true,
+      opacity: 0.09,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    })
+  );
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(1.7, 0.065, 8, 40),
+    new THREE.MeshBasicMaterial({ color: '#ffd6a0', transparent: true, opacity: 0.9, depthWrite: false })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  waypoint = new THREE.Group();
+  beam.position.y = 4;
+  ring.position.y = 0.18;
+  waypoint.add(beam, ring);
+  waypoint.visible = false;
+  scene.add(waypoint);
+}
+function updateNavigation() {
+  const index = trail.checkpoints[Math.min(tracker.next, trail.checkpoints.length - 1)],
+    p = trail.points[index],
+    distance = Math.hypot(p[0] - bike.x, p[2] - bike.z),
+    bearing = Math.atan2(-(p[0] - bike.x), -(p[2] - bike.z));
+  $('waypoint-arrow').style.transform = `rotate(${(-wrapAngle(bearing - bike.yaw) * 180) / Math.PI}deg)`;
+  $('waypoint-distance').textContent = `CP ${Math.min(tracker.next + 1, trail.checkpoints.length)
+    .toString()
+    .padStart(2, '0')} · ${Math.round(distance)} m`;
+  waypoint.position.set(p[0], p[1], p[2]);
+  waypoint.visible = !tracker.complete;
+  const reference = ghostTrace.timeAtProgress(nearestIndex / (trail.points.length - 1));
+  $('ghost-gap').textContent =
+    reference === null
+      ? 'GEIST · ERSTER RUN'
+      : 'GEIST ' + (elapsed - reference >= 0 ? '+' : '−') + Math.abs(elapsed - reference).toFixed(2) + ' s';
+  $('ghost-gap').dataset.ahead = reference !== null && elapsed < reference ? 'yes' : 'no';
+}
+function checkpointSplit() {
+  const slot = tracker.next - 2,
+    reference = bestSplits[slot],
+    difference = reference === undefined ? null : elapsed - reference;
+  runSplits[slot] = elapsed;
+  $('split-time').textContent = formatTime(elapsed);
+  $('split-gap').textContent =
+    difference === null
+      ? 'ERSTE ZWISCHENZEIT'
+      : (difference >= 0 ? '+' : '−') + Math.abs(difference).toFixed(2) + ' s ZUM BESTEN RUN';
+  $('split-feedback').dataset.ahead = difference !== null && difference < 0 ? 'yes' : 'no';
+  show('split-feedback', true);
+  clearTimeout(checkpointSplit.timeout);
+  checkpointSplit.timeout = setTimeout(() => show('split-feedback', false), 4200);
+}
+function ensureAudio() {
+  if (audio) {
+    audio.resume();
+    return;
+  }
+  try {
+    audio = new RideAudio();
+    audio.resume();
+  } catch {
+    soundEnabled = false;
+  }
+}
+function beep(freq, duration) {
+  if (!soundEnabled) return;
+  ensureAudio();
+  audio?.beep(freq, duration);
+}
+function updateAudio() {
+  audio?.update(bike, state === 'riding' && soundEnabled, Number(input.throttle));
+}
+function toggleSound() {
+  soundEnabled = !soundEnabled;
+  storage.set('sound', soundEnabled);
+  if (soundEnabled) ensureAudio();
+  $('sound-toggle').textContent = soundEnabled ? 'TON AN' : 'TON AUS';
+  toast(soundEnabled ? 'SOUND AN' : 'SOUND AUS');
+}
+function animate(now) {
+  requestAnimationFrame(animate);
+  const rawDt = (now - lastTime) / 1000 || 0;
+  lastTime = now;
+  if (document.hidden) return;
+  const dt = Math.min(0.06, rawDt);
+  if (state === 'riding') {
+    input.steer =
+      touchSteer +
+      (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) -
+      (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+    input.throttle = (autoPedal && bike.speed < 8.5) || keys.has('KeyW') || keys.has('ArrowUp');
+    input.brake = Math.max(touchBrake, keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+    input.rearBrake = keys.has('KeyV') ? 1 : 0;
+    input.weight = clamp(
+      touchWeight + (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 1 : 0) - (keys.has('KeyX') ? 1 : 0),
+      -1,
+      1
+    );
+    input.jumpHeld = touchJumpHeld || keys.has('Space');
+    input.jump = false;
+    input.sensitivity = sensitivity;
+    const pad = navigator.getGamepads?.()?.find(p => p?.connected);
+    if (pad) {
+      const axis = pad.axes[0] || 0;
+      input.steer += Math.abs(axis) > 0.12 ? (Math.sign(axis) * (Math.abs(axis) - 0.12)) / 0.88 : 0;
+      input.weight = clamp(input.weight - (pad.axes[1] || 0), -1, 1);
+      input.throttle = Math.max(Number(input.throttle), pad.buttons[7]?.value || 0);
+      input.brake = Math.max(input.brake, pad.buttons[6]?.value || 0);
+      input.jumpHeld ||= !!pad.buttons[0]?.pressed;
+    }
+    accumulator += dt;
+    let iterations = 0;
+    while (accumulator >= 1 / 120 && iterations++ < 9) {
+      bike.step(1 / 120, input);
+      elapsed += 1 / 120;
+      accumulator -= 1 / 120;
+      collisions.collideBike(bike);
+      if (bike.crashed) {
+        crash();
+        break;
+      }
+    }
+    const progress = tracker.update(bike.x, bike.z);
+    nearestIndex = progress.index;
+    nearDistance = progress.distance;
+    if (progress.crossed) {
+      checkpointSplit();
+      beep(620, 0.08);
+      toast(progress.complete ? 'FINISH' : 'CHECKPOINT ' + (tracker.next - 1).toString().padStart(2, '0'));
+      if (progress.complete && state === 'riding' && mode === 'race') finish();
+    }
+    if (bike.air) runAir = bike.airtime;
+    else if (runAir) {
+      totalAir += runAir;
+      if (runAir > 0.45 && bike.landingQuality === 'smooth') toast('SAUBERE LANDUNG · FLOW');
+      runAir = 0;
+    }
+    if (bike.atBoundary && frameCount % 180 === 0) toast('GEBIETSGRENZE · WENDE DEIN BIKE');
+    if (state === 'riding' && elapsed - lastGhostT > 0.1) recordGhost();
+    updateGhost();
+    if (frontWheel) {
+      frontWheel.rotation.x -= (bike.speed * dt) / 0.42;
+      rearWheel.rotation.x -= ((bike.speed * dt) / 0.42) * (1 - input.rearBrake * 0.85);
+    }
+    bike.visualImpact = feedback.update(bike, dt, soundEnabled ? audio : null);
+    skidMarks.update(bike, elapsed);
+    syncPlayer(dt, input.throttle);
+    rideCamera(dt);
+    updateHud();
+  } else if (state === 'menu') heroCamera(dt);
+  else if (state === 'countdown') rideCamera(dt);
+  worldV2?.update(camera, bike, now / 1000);
+  updateParticles(dt);
+  updateAudio();
+  renderer.shadowMap.needsUpdate = frameCount % (touch || frameBudget.level > 1 ? 2 : 1) === 0;
+  renderer.render(scene, camera);
+  frameCount++;
+  frameTotal += dt;
+  if (frameCount % 60 === 0) {
+    document.documentElement.dataset.version = ASSET_VERSION;
+    document.documentElement.dataset.region = selected.id;
+    document.documentElement.dataset.line = selected.line;
+    document.documentElement.dataset.sourceStep = String(region.step);
+    document.documentElement.dataset.rigged = 'true';
+    document.documentElement.dataset.setup = setupSignature(bikeSetup);
+    document.documentElement.dataset.x = bike.x.toFixed(1);
+    document.documentElement.dataset.z = bike.z.toFixed(1);
+    document.documentElement.dataset.offTrail = nearDistance.toFixed(1);
+    document.documentElement.dataset.skidMarks = String(skidMarks?.count || 0);
+    document.documentElement.dataset.audio = audio ? audio.ctx.state : 'off';
+    document.documentElement.dataset.detailVersion = '3';
+    document.documentElement.dataset.colliders = String(collisions.objects.length);
+    document.documentElement.dataset.fps = String(frameBudget.last?.fps || Math.round(60 / frameTotal));
+    document.documentElement.dataset.triangles = String(renderer.info.render.triangles);
+    frameTotal = 0;
+  }
+  const measured = frameBudget.push(rawDt, state === 'riding' && !document.hidden);
+  if (measured) {
+    if (measured.change) {
+      renderer.setPixelRatio(Math.max(0.7, baseDpr * Math.pow(0.84, measured.level)));
+      renderer.setSize(innerWidth, innerHeight);
+      worldV2.setBudget(measured.level);
+    }
+    const record = {
+      ...measured,
+      quality,
+      region: selected.id,
+      line: selected.line,
+      triangles: renderer.info.render.triangles,
+      drawCalls: renderer.info.render.calls,
+      dpr: +renderer.getPixelRatio().toFixed(2),
+    };
+    storage.set('performance.' + selected.id + '.' + quality, record);
+    $('performance-hud').textContent = `${measured.fps} FPS · P95 ${measured.p95Ms} ms`;
+    document.documentElement.dataset.fps = String(measured.fps);
+    document.documentElement.dataset.p95 = String(measured.p95Ms);
+    document.documentElement.dataset.budget = String(measured.level);
+  }
+}
+function regionPanel() {
+  dialog(
+    `<span class="micro">SWISS TERRAIN SERIES / ${selected.number}</span><h2>${selected.label}.<br>Deine eigene Linie.</h2><p>${selected.id === 'lenzerheide' ? 'Von Scharmoin hinunter Richtung Rothorn-Talstation. Alpine Flow führt über offene Hänge und durch Nadelwald; Roots Line nimmt die kürzere, technische Variante.' : 'Das Uetliberg-Massiv über Zürich, als vollständig vorbereitetes 3D-Gelände.'} ${(((region.bounds[2] - region.bounds[0]) * (region.bounds[3] - region.bounds[1])) / 1e6).toFixed(1)} km² befahrbares Gelände, Höhen aus swissALTI3D und Luftbilder aus SWISSIMAGE.${selected.id === 'lenzerheide' ? ' Dazu kommt das vorab modellierte Bergpanorama.' : ''}</p><p>Die ${(Math.round(trail.length / 10) / 100).toFixed(2)} km lange ${selected.title}-Abfahrt ist für dieses Spiel gestaltet. Sie bildet keine offizielle Bikepark-Linie nach und dient nicht als reale Navigation.</p><p>Das Gelände wurde aus lokal heruntergeladenen Daten in Blender gebaut. Während deiner Fahrt werden keine Karten oder Geodaten gestreamt.</p><p><a href="https://www.swisstopo.admin.ch/de/hoehenmodell-swissalti3d" target="_blank" rel="noopener">Höhendaten</a> · <a href="https://www.swisstopo.admin.ch/de/orthobilder-swissimage-10-cm" target="_blank" rel="noopener">Luftbilder</a> · <a href="${asset('sources.json')}" target="_blank" rel="noopener">Datenstände und Quellen</a><br>©swisstopo · Lokaler Datenstand ${region.sourceSnapshot}</p><p>Vegetation und PBR-Materialien: <a href="https://polyhaven.com/" target="_blank" rel="noopener">Poly Haven</a> · CC0. <a href="${asset('art-sources.json')}" target="_blank" rel="noopener">Materialquellen</a>.</p><p><a href="https://github.com/Trapanotto/downhill" target="_blank" rel="noopener">Spiel und Quellcode: Trapanotto/downhill</a></p>`
+  );
+}
+function controlsPanel() {
+  dialog(
+    `<span class="micro">DEIN BIKE. DEINE KONTROLLE.</span><h2>Finde deinen Flow.</h2><div class="controls"><p><b>W / ↑</b>Treten</p><p><b>S / ↓</b>Bremsen</p><p><b>A D / ← →</b>Lenken</p><p><b>Leertaste</b>Halten: vorspannen · loslassen: springen</p><p><b>R</b>Zum Checkpoint (+3 s)</p><p><b>Shift / X</b>Gewicht vor / zurück</p><p><b>V</b>Hinterradbremse</p><p><b>C / P / M</b>Kamera / Pause / Sound</p></div><p>Gamepad: linker Stick lenkt und verlagert das Gewicht, RT tritt, LT bremst dosiert. A halten und loslassen: springen. Auf dem Smartphone: links lenken; den Daumen vor/zurück bewegen für Gewichtsverlagerung. Rechts bremsen, für mehr Bremskraft nach oben ziehen. Sprung halten und loslassen. Autopedal lässt sich in den Optionen einstellen.</p><p>Du kannst die markierte Linie verlassen und das ganze vorbereitete Gebiet frei befahren. R setzt dich nur auf deinen Befehl zurück. Im Zeitfahren müssen die Checkpoints der Reihe nach passiert werden. Deine Bestzeit und dein Geist bleiben auf diesem Gerät gespeichert.</p>${touch ? '<span class="portrait-tip">Tipp: Drehe dein Smartphone ins Querformat für mehr Sicht auf die Strecke.</span>' : ''}`
+  );
+}
+function settingsPanel() {
+  dialog(
+    `<span class="micro">DEIN SETUP</span><h2>Bereit für den Berg.</h2><label>Grafik<select id="quality"><option value="high">Ultra · 4K-Texturen</option><option value="balanced">Ausgewogen</option><option value="mobile">Mobil · 2K-Texturen</option></select></label><label>Lenkempfindlichkeit<input id="sensitivity" type="range" min="0.5" max="1.5" value="${sensitivity}" step=".1"></label><label>Leistungsanzeige<input id="performance-setting" type="checkbox" ${showPerformance ? 'checked' : ''}></label><label>Automatisch treten<input id="autopedal" type="checkbox" ${autoPedal ? 'checked' : ''}></label><label>Natur- und Fahrgeräusche<input id="audio-setting" type="checkbox" ${soundEnabled ? 'checked' : ''}></label><p>Grafikwechsel lädt das vorbereitete Gebiet neu. Die Bildauflösung passt sich bei Bedarf automatisch an die Leistung deines Geräts an.</p><button id="performance-report" class="secondary">MESSWERTE ANZEIGEN</button><button id="offline-save" class="secondary">SPIEL OFFLINE SPEICHERN</button><p id="offline-status" role="status"></p><button id="apply" class="primary">EINSTELLUNGEN ÜBERNEHMEN <span>↗</span></button>`
+  );
+  $('quality').value = quality;
+  $('apply').onclick = () => {
+    const next = $('quality').value;
+    storage.set('quality', next);
+    sensitivity = +$('sensitivity').value;
+    storage.set('sensitivity', sensitivity);
+    showPerformance = $('performance-setting').checked;
+    storage.set('show-performance', showPerformance);
+    autoPedal = $('autopedal').checked;
+    storage.set('autoPedal', autoPedal);
+    soundEnabled = $('audio-setting').checked;
+    storage.set('sound', soundEnabled);
+    if (soundEnabled) ensureAudio();
+    $('sound-toggle').textContent = soundEnabled ? 'TON AN' : 'TON AUS';
+    if (next !== quality) location.reload();
+    else closePanel();
+  };
+  $('offline-save').onclick = saveOffline;
+  $('performance-report').onclick = performancePanel;
+}
+function bikePanel() {
+  if (state !== 'menu') return;
+  let draft = { ...bikeSetup };
+  dialog(
+    `<span class="micro">DEIN BIKE</span><h2>Stimme deinen Ride ab.</h2><div class="setup-presets">${Object.entries(
+      SETUP_PRESETS
+    )
+      .map(([id, p]) => `<button data-preset="${id}">${p.label}</button>`)
+      .join(
+        ''
+      )}</div><p id="setup-description"></p><label>Federung <output id="suspension-value"></output><input id="setup-suspension" type="range" min="0" max="100" step="5" value="${draft.suspension * 100}" aria-label="Federung"></label><small class="setup-scale">Straff / direkt <span>Weich / komfortabel</span></small><label>Reifengrip <output id="tyres-value"></output><input id="setup-tyres" type="range" min="0" max="100" step="5" value="${draft.tyres * 100}" aria-label="Reifengrip"></label><small class="setup-scale">Leicht rollend <span>Griffig / mehr Widerstand</span></small><label>Bremskraft <output id="brakes-value"></output><input id="setup-brakes" type="range" min="0" max="100" step="5" value="${draft.brakes * 100}" aria-label="Bremskraft"></label><small class="setup-scale">Sanft dosiert <span>Kräftig / schneller am Griplimit</span></small><p>Mehr Grip erhöht auch den Rollwiderstand. Eine weichere Federung federt stärker ein. Bestzeit und Geist werden für jede Abstimmung separat geführt.</p><button id="save-bike" class="primary">ABSTIMMUNG SPEICHERN <span>↗</span></button>`
+  );
+  const refresh = () => {
+    for (const key of ['suspension', 'tyres', 'brakes']) {
+      $('setup-' + key).value = draft[key] * 100;
+      $(key + '-value').textContent = Math.round(draft[key] * 100) + ' %';
+    }
+    for (const button of $('panel-content').querySelectorAll('[data-preset]')) {
+      const active = setupSignature(SETUP_PRESETS[button.dataset.preset]) === setupSignature(draft);
+      button.classList.toggle('selected', active);
+      button.setAttribute('aria-pressed', String(active));
+    }
+    $('setup-description').textContent =
+      setupLabel(draft) +
+      ' · ' +
+      (draft.suspension > 0.6
+        ? 'Komfort auf Wurzeln und Landungen.'
+        : draft.suspension < 0.4
+          ? 'Direkte Rückmeldung und straffe Federung.'
+          : 'Vielseitige Abstimmung für alle drei Routen.');
+  };
+  for (const key of ['suspension', 'tyres', 'brakes'])
+    $('setup-' + key).oninput = () => {
+      draft[key] = +$('setup-' + key).value / 100;
+      refresh();
+    };
+  for (const button of $('panel-content').querySelectorAll('[data-preset]'))
+    button.onclick = () => {
+      draft = normalizeSetup(SETUP_PRESETS[button.dataset.preset]);
+      refresh();
+    };
+  refresh();
+  $('save-bike').onclick = () => {
+    bikeSetup = normalizeSetup(draft);
+    storage.set('bike-setup', bikeSetup);
+    records = recordKeys(selected, bikeSetup);
+    runBest = storage.get(records.best, null);
+    ghostSaved = storage.get(records.ghost, null);
+    bestSplits = storage.get(records.splits, []);
+    bike.setSetup(bikeSetup);
+    bike.reset();
+    tracker.reset();
+    nearestIndex = 0;
+    feedback.reset();
+    syncPlayer();
+    buildGhost();
+    refreshBest();
+    $('bike-setup-label').textContent = setupLabel(bikeSetup);
+    closePanel();
+  };
+}
+function performancePanel() {
+  const r = storage.get('performance.' + selected.id + '.' + quality, null);
+  dialog(
+    `<span class="micro">DEIN GERÄT / AKTUELLES GRAFIKPROFIL</span><h2>So läuft dein Ride.</h2>${r ? `<div class="performance-stats"><div><strong>${r.fps}</strong><span>FPS IM MITTEL</span></div><div><strong>${r.p95Ms}<small> ms</small></strong><span>95 % DER FRAMES</span></div></div><p>${selected.label} · ${quality === 'high' ? 'Ultra' : quality === 'mobile' ? 'Mobil' : 'Ausgewogen'}<br>${Math.round(r.triangles / 1000)} Tausend Dreiecke · ${r.drawCalls} Zeichenaufrufe<br>Renderfaktor ${r.dpr} · Anpassungsstufe ${r.level}/3</p><p>Gemessen während der Fahrt auf diesem Gerät. P95 zeigt die langsameren Frames: kleinere Werte bedeuten gleichmässigere Darstellung. Die Automatik reduziert bei längerer hoher Last Auflösung und Vegetationsdetails.</p>` : '<p>Fahre mindestens drei Sekunden, um Messwerte für dieses Grafikprofil zu sammeln. Unter Optionen kannst du die Leistungsanzeige während der Fahrt einschalten.</p>'}<button id="back-settings" class="primary">ZURÜCK ZU OPTIONEN <span>↗</span></button>`
+  );
+  $('back-settings').onclick = settingsPanel;
+}
+async function saveOffline() {
+  const button = $('offline-save'),
+    status = $('offline-status');
+  button.disabled = true;
+  status.textContent = 'Das gesamte Spielpaket wird auf diesem Gerät gespeichert …';
+  try {
+    if (!('serviceWorker' in navigator)) throw Error('Dieser Browser unterstützt keine Offline-Speicherung.');
+    const reg = await navigator.serviceWorker.register(base + 'sw.js');
+    await navigator.serviceWorker.ready;
+    const worker = reg.installing || reg.waiting || reg.active;
+    if (worker.state !== 'activated')
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(
+          () => reject(Error('Offline-Modul konnte nicht aktiviert werden.')),
+          45000
+        );
+        const check = () => {
+          if (worker.state === 'activated') {
+            clearTimeout(timeout);
+            worker.removeEventListener('statechange', check);
+            resolve();
+          } else if (worker.state === 'redundant') {
+            clearTimeout(timeout);
+            reject(Error('Bitte Seite neu laden und erneut speichern.'));
+          }
+        };
+        worker.addEventListener('statechange', check);
+        check();
+      });
+    await new Promise((resolve, reject) => {
+      const channel = new MessageChannel(),
+        timeout = setTimeout(
+          () => reject(Error('Zeitüberschreitung beim Speichern. Bitte online erneut versuchen.')),
+          120000
+        );
+      channel.port1.onmessage = e => {
+        clearTimeout(timeout);
+        e.data.ok ? resolve() : reject(Error(e.data.error));
+      };
+      worker.postMessage({ type: 'CACHE_GAME' }, [channel.port2]);
+    });
+    status.textContent = 'Bereit. Du kannst das Spiel jetzt auch ohne Internet öffnen.';
+    button.textContent = 'OFFLINE GESPEICHERT ✓';
+  } catch (e) {
+    status.textContent = e.message;
+    button.disabled = false;
+  }
+}
+$('panel-close').onclick = closePanel;
+$('panel').addEventListener('click', e => {
+  if (e.target === $('panel')) {
+    const b = $('panel').getBoundingClientRect();
+    if (e.clientX < b.left || e.clientX > b.right || e.clientY < b.top || e.clientY > b.bottom) closePanel();
+  }
+});
+$('bike-setup').onclick = bikePanel;
+$('nav-ride').onclick = () => {
+  closePanel();
+  if (state === 'menu') chooseMode('race');
+};
+$('nav-region').onclick = regionPanel;
+$('nav-settings').onclick = settingsPanel;
+$('help-open').onclick = controlsPanel;
+$('home').onclick = () => {
+  closePanel();
+  showMenu();
+};
+$('start').onclick = startRun;
+$('mode-race').onclick = () => chooseMode('race');
+$('mode-free').onclick = () => chooseMode('free');
+$('pause').onclick = pause;
+$('camera').onclick = () => {
+  cameraFar = !cameraFar;
+  toast(cameraFar ? 'KAMERA · WEIT' : 'KAMERA · NAH');
+};
+$('sound-toggle').onclick = toggleSound;
+$('sound-toggle').textContent = soundEnabled ? 'TON AN' : 'TON AUS';
+$('respawn').onclick = () => {
+  respawn();
+  show('touch', touch);
+};
+window.addEventListener('keydown', e => {
+  if (['Space', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code))
+    e.preventDefault();
+  if (e.repeat) return;
+  if (state === 'riding') {
+    keys.add(e.code);
+    if (e.code === 'KeyR') {
+      respawn();
+      show('touch', touch);
+    }
+    if (e.code === 'KeyC') $('camera').click();
+    if (e.code === 'KeyM') toggleSound();
+    if (e.code === 'KeyP' || e.code === 'Escape') pause();
+  } else if (state === 'crashed' && (e.code === 'KeyR' || e.code === 'Enter' || e.code === 'Space')) {
+    respawn();
+    show('touch', touch);
+  } else if (state === 'menu' && e.code === 'Enter' && !$('panel').open) startRun();
+});
+window.addEventListener('keyup', e => keys.delete(e.code));
+window.addEventListener('blur', () => {
+  keys.clear();
+  touchBrake = 0;
+  touchSteer = 0;
+  touchWeight = 0;
+  touchJumpHeld = false;
+  if (state === 'riding') pause();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state === 'riding') pause();
+});
+window.addEventListener('resize', () => {
+  if (!renderer) return;
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+const steerPad = $('steer-pad');
+let steerPointer = null;
+function steerAt(e) {
+  const b = steerPad.getBoundingClientRect();
+  const raw = clamp((e.clientX - b.left - b.width / 2) / (b.width * 0.42), -1, 1);
+  touchSteer = Math.abs(raw) < 0.06 ? 0 : Math.sign(raw) * Math.pow((Math.abs(raw) - 0.06) / 0.94, 1.22);
+  touchWeight = clamp(-(e.clientY - b.top - b.height / 2) / (b.height * 0.55), -1, 1);
+  $('steer-knob').style.transform = `translate(${touchSteer * 30}px,${-touchWeight * 24}px)`;
+}
+steerPad.addEventListener('pointerdown', e => {
+  steerPointer = e.pointerId;
+  steerPad.setPointerCapture(e.pointerId);
+  steerAt(e);
+});
+steerPad.addEventListener('pointermove', e => {
+  if (e.pointerId === steerPointer) steerAt(e);
+});
+function clearSteer() {
+  steerPointer = null;
+  touchSteer = 0;
+  touchWeight = 0;
+  $('steer-knob').style.transform = '';
+}
+for (const event of ['pointerup', 'pointercancel', 'lostpointercapture'])
+  steerPad.addEventListener(event, clearSteer);
+let brakePointer = null,
+  brakeOrigin = 0;
+$('touch-brake').addEventListener('pointerdown', e => {
+  touchBrake = 0.68;
+  brakeOrigin = e.clientY;
+  brakePointer = e.pointerId;
+  $('touch-brake').setPointerCapture(e.pointerId);
+  $('touch-brake').style.setProperty('--brake', '68%');
+});
+$('touch-brake').addEventListener('pointermove', e => {
+  if (e.pointerId === brakePointer) {
+    touchBrake = clamp(0.68 + (brakeOrigin - e.clientY) / 90, 0.15, 1);
+    $('touch-brake').style.setProperty('--brake', touchBrake * 100 + '%');
+  }
+});
+for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'])
+  $('touch-brake').addEventListener(ev, () => {
+    touchBrake = 0;
+    brakePointer = null;
+    $('touch-brake').style.setProperty('--brake', '0%');
+  });
+$('touch-jump').addEventListener('pointerdown', e => {
+  touchJumpHeld = true;
+  $('touch-jump').setPointerCapture(e.pointerId);
+});
+for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'])
+  $('touch-jump').addEventListener(ev, () => (touchJumpHeld = false));
 init();

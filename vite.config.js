@@ -1,11 +1,36 @@
-import {defineConfig} from 'vite';
-import {readdir,writeFile,readFile,rm} from 'node:fs/promises';
+import { defineConfig } from 'vite';
+import { readdir, writeFile, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
-export default defineConfig({base:'/downhill/',build:{chunkSizeWarningLimit:850},plugins:[{name:'trapanotto-offline',async closeBundle(){
- async function walk(dir){const out=[];for(const e of await readdir(dir,{withFileTypes:true})){const p=path.join(dir,e.name);if(e.isDirectory())out.push(...await walk(p));else out.push(p.replace(/^dist\//,''))}return out}
- const legacy=f=>/^(tree-v[23]-(high|mobile)|tree-(high|mobile)|terrain-(high|mobile)|corridor-v3-(high|mobile)|bike(?:-v3)?|rider-v3|corridor|panorama|trail)\.glb$/.test(path.basename(f))||path.basename(f)==='tree-impostor.webp';
- for(const f of await walk('dist'))if(legacy(f))await rm(path.join('dist',f));
- const files=(await walk('dist')).filter(f=>!['sw.js','offline-files.json'].includes(f));const version=JSON.parse(await readFile('package.json','utf8')).version;const cache='trapanotto-'+version+'-'+Date.now();
- await writeFile('dist/offline-files.json',JSON.stringify(files));
- await writeFile('dist/sw.js',`const CACHE=${JSON.stringify(cache)};const VERSION=${JSON.stringify(version)};const FILES=${JSON.stringify(files)};const ROOT=new URL('./',self.location.href);self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k.startsWith('trapanotto-')&&k!==CACHE)await caches.delete(k);await self.clients.claim()})()));self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||new URL(e.request.url).origin!==location.origin)return;e.respondWith((async()=>{const assetVersion=new URL(e.request.url).searchParams.get('v');if(assetVersion&&assetVersion!==VERSION)return fetch(e.request);const cache=await caches.open(CACHE);if(e.request.mode==='navigate'){try{const page=await fetch(e.request);if(page.ok)await cache.put(new URL('index.html',ROOT),page.clone());return page}catch(err){const page=await cache.match(new URL('index.html',ROOT),{ignoreVary:true});if(page)return page;throw err}}const hit=await cache.match(e.request,{ignoreVary:true,ignoreSearch:true});if(hit)return hit;try{const r=await fetch(e.request);if(r.ok)cache.put(e.request,r.clone());return r}catch(err){if(e.request.mode==='navigate'){const index=await cache.match(new URL('index.html',ROOT),{ignoreVary:true});if(index)return index}throw err}})())});self.addEventListener('message',e=>{if(e.data.type==='CACHE_GAME')e.waitUntil((async()=>{try{const c=await caches.open(CACHE);for(const f of FILES){const u=new URL(f,ROOT);if(!await c.match(u,{ignoreVary:true})){const r=await fetch(u);if(!r.ok)throw Error(f+': '+r.status);await c.put(u,r)}}await c.put(ROOT,await c.match(new URL('index.html',ROOT),{ignoreVary:true}));e.ports[0].postMessage({ok:true})}catch(err){e.ports[0].postMessage({ok:false,error:err.message})}})())});`);
- }}]});
+export default defineConfig({
+  base: '/downhill/',
+  build: { chunkSizeWarningLimit: 850 },
+  plugins: [
+    {
+      name: 'trapanotto-offline',
+      async closeBundle() {
+        async function walk(dir) {
+          const out = [];
+          for (const e of await readdir(dir, { withFileTypes: true })) {
+            const p = path.join(dir, e.name);
+            if (e.isDirectory()) out.push(...(await walk(p)));
+            else out.push(p.replace(/^dist\//, ''));
+          }
+          return out;
+        }
+        const legacy = f =>
+          /^(tree-v[23]-(high|mobile)|tree-(high|mobile)|terrain-(high|mobile)|corridor-v3-(high|mobile)|bike(?:-v3)?|rider-v3|corridor|panorama|trail)\.glb$/.test(
+            path.basename(f)
+          ) || path.basename(f) === 'tree-impostor.webp';
+        for (const f of await walk('dist')) if (legacy(f)) await rm(path.join('dist', f));
+        const files = (await walk('dist')).filter(f => !['sw.js', 'offline-files.json'].includes(f));
+        const version = JSON.parse(await readFile('package.json', 'utf8')).version;
+        const cache = 'trapanotto-' + version + '-' + Date.now();
+        await writeFile('dist/offline-files.json', JSON.stringify(files));
+        await writeFile(
+          'dist/sw.js',
+          `const CACHE=${JSON.stringify(cache)};const VERSION=${JSON.stringify(version)};const FILES=${JSON.stringify(files)};const ROOT=new URL('./',self.location.href);self.addEventListener('install',e=>e.waitUntil(self.skipWaiting()));self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const k of await caches.keys())if(k.startsWith('trapanotto-')&&k!==CACHE)await caches.delete(k);await self.clients.claim()})()));self.addEventListener('fetch',e=>{if(e.request.method!=='GET'||new URL(e.request.url).origin!==location.origin)return;e.respondWith((async()=>{const assetVersion=new URL(e.request.url).searchParams.get('v');if(assetVersion&&assetVersion!==VERSION)return fetch(e.request);const cache=await caches.open(CACHE);if(e.request.mode==='navigate'){try{const page=await fetch(e.request);if(page.ok)await cache.put(new URL('index.html',ROOT),page.clone());return page}catch(err){const page=await cache.match(new URL('index.html',ROOT),{ignoreVary:true});if(page)return page;throw err}}const hit=await cache.match(e.request,{ignoreVary:true,ignoreSearch:true});if(hit)return hit;try{const r=await fetch(e.request);if(r.ok)cache.put(e.request,r.clone());return r}catch(err){if(e.request.mode==='navigate'){const index=await cache.match(new URL('index.html',ROOT),{ignoreVary:true});if(index)return index}throw err}})())});self.addEventListener('message',e=>{if(e.data.type==='CACHE_GAME')e.waitUntil((async()=>{try{const c=await caches.open(CACHE);for(const f of FILES){const u=new URL(f,ROOT);if(!await c.match(u,{ignoreVary:true})){const r=await fetch(u);if(!r.ok)throw Error(f+': '+r.status);await c.put(u,r)}}await c.put(ROOT,await c.match(new URL('index.html',ROOT),{ignoreVary:true}));e.ports[0].postMessage({ok:true})}catch(err){e.ports[0].postMessage({ok:false,error:err.message})}})())});`
+        );
+      },
+    },
+  ],
+});

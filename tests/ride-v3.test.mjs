@@ -1,11 +1,128 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import * as THREE from 'three';import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
-import {ObstacleWorld} from '../src/collisions.mjs';import {ReplayTrack,minimapTransform,routeLookAhead} from '../src/race.mjs';import {RiderAnimator,solveLimb} from '../src/rider.mjs';import {RideCamera} from '../src/camera.mjs';import {BikePhysics} from '../src/physics.mjs';
-const flat={sample:()=>0,gradient:()=>({x:0,z:0}),contains:()=>true},trail={points:[[0,0,0],[0,0,-20],[0,0,-40]]};
-test('swept obstacles prevent tunnelling and respect vertical clearance',()=>{const world=new ObstacleWorld([], {rocks:[[0,0,0,1,0]]});let hit=world.sweep({x:-10,y:0,z:0},{x:10,y:0,z:0});assert.equal(hit.object.type,'rock');assert.ok(hit.fraction>.4&&hit.fraction<.5);assert.equal(world.sweep({x:-10,y:3,z:0},{x:10,y:3,z:0}),null);const bike={previousX:-10,previousY:0,previousZ:0,x:10,y:0,z:0,speed:20};world.collideBike(bike);assert.equal(bike.crashed,true);assert.ok(bike.x<0)});
-test('rotated buildings and poles constrain the camera as well as the bike',()=>{const w=new ObstacleWorld();w.add({type:'building',x:0,z:0,bottom:0,top:3,halfX:2,halfZ:.2,yaw:Math.PI/4});assert.ok(w.cameraFraction({x:-5,y:1,z:0},{x:5,y:1,z:0})<.5);assert.equal(w.cameraFraction({x:-5,y:5,z:0},{x:5,y:5,z:0}),1);w.add({type:'pole',x:8,z:0,bottom:0,top:3,radius:.045});assert.equal(w.sweep({x:7,y:0,z:0},{x:9,y:0,z:0}).object.type,'pole')});
-test('loose ground reduces braking and simultaneous cornering grip',()=>{function run(grip,brake=1){const b=new BikePhysics({...flat,surfaceAt:()=>({name:'test',grip,resistance:.09})},trail);b.speed=15;for(let i=0;i<60;i++)b.step(1/120,{steer:1,brake});return b}const good=run(1),loose=run(.5),corner=run(1,0);assert.ok(loose.speed>good.speed+1);assert.ok(Math.abs(good.travelYaw)<Math.abs(corner.travelYaw));assert.ok(loose.rearSlip>good.rearSlip)});
-test('ghost interpolation wraps angles and compares time at equal route progress',()=>{const a=[0,0,0,0,3.1,0,0,0,6.2,0,.02,.02],b=[10,20,4,8,-3.1,.2,.2,1,.1,1,.08,.06],r=new ReplayTrack([a,b]);const p=r.sample(5);assert.equal(p[1],10);assert.ok(Math.abs(p[4]-Math.PI)<.01);assert.ok(p[8]>6.2&&p[8]<6.4);assert.equal(r.timeAtProgress(.25),2.5);assert.equal(r.sample(11),null);assert.equal(r.timeAtProgress(2),null)});
-test('all three minimaps fit route bounds and lookahead follows distance',()=>{for(const file of ['public/assets/trail.json','public/assets/lenzerheide/trail.json','public/assets/lenzerheide/trail-technical.json']){const points=JSON.parse(fs.readFileSync(file)).points,map=minimapTransform(points);for(const p of points)for(const v of map(p))assert.ok(v>=23.99&&v<=216.01)}assert.deepEqual(routeLookAhead(trail.points,0,25),trail.points[2])});
-test('two-bone IK preserves lengths even for unreachable targets',()=>{for(const t of [new THREE.Vector3(.3,-.5,.2),new THREE.Vector3(10,0,0),new THREE.Vector3()]){const start=new THREE.Vector3(),r=solveLimb(start,t,new THREE.Vector3(0,0,1),.4,.5);assert.ok(Math.abs(r.joint.distanceTo(start)-.4)<1e-6);assert.ok(Math.abs(r.joint.distanceTo(r.end)-.5)<1e-6)}});
-test('shipped rider has weighted skin and animated hands remain at the grips',async()=>{const bytes=fs.readFileSync('public/assets/rider-v4.glb'),loader=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),g=await loader.parseAsync(bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength),'');const player=new THREE.Group();player.add(g.scene);let skins=0;g.scene.traverse(o=>{if(o.isSkinnedMesh){skins++;assert.ok(o.geometry.getAttribute('skinWeight'));assert.ok(o.skeleton.bones.length>=16)}});assert.ok(skins>0);const rig=new RiderAnimator(player,g.scene);const initial=rig.point('FootL').clone();for(let i=0;i<120;i++)rig.update({weight:Math.sin(i*.03),speed:8,lean:.3,steer:.5,jumpCharge:0,brakePressure:0},1/60,1);assert.ok(rig.point('FootL').distanceTo(initial)>.1);assert.ok(rig.point('HandL').distanceTo(new THREE.Vector3(-.35,1.18,-.59))<.08);for(const bone of Object.values(rig.bones))assert.ok(bone.matrixWorld.elements.every(Number.isFinite))});
-test('camera stays in front of an obstructing wall and above the ground',()=>{const w=new ObstacleWorld();w.add({type:'building',x:0,z:3,bottom:0,top:5,halfX:10,halfZ:.3});const b=new BikePhysics(flat,trail),c=new THREE.PerspectiveCamera(),follow=new RideCamera();follow.update(c,b,trail,0,flat,w,1/60,false,true);assert.ok(c.position.z<2.4);assert.ok(c.position.y>.32);assert.ok(c.position.toArray().every(Number.isFinite))});
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { ObstacleWorld } from '../src/collisions.mjs';
+import { ReplayTrack, minimapTransform, routeLookAhead } from '../src/race.mjs';
+import { RiderAnimator, solveLimb } from '../src/rider.mjs';
+import { RideCamera } from '../src/camera.mjs';
+import { BikePhysics } from '../src/physics.mjs';
+const flat = { sample: () => 0, gradient: () => ({ x: 0, z: 0 }), contains: () => true },
+  trail = {
+    points: [
+      [0, 0, 0],
+      [0, 0, -20],
+      [0, 0, -40],
+    ],
+  };
+test('swept obstacles prevent tunnelling and respect vertical clearance', () => {
+  const world = new ObstacleWorld([], { rocks: [[0, 0, 0, 1, 0]] });
+  let hit = world.sweep({ x: -10, y: 0, z: 0 }, { x: 10, y: 0, z: 0 });
+  assert.equal(hit.object.type, 'rock');
+  assert.ok(hit.fraction > 0.4 && hit.fraction < 0.5);
+  assert.equal(world.sweep({ x: -10, y: 3, z: 0 }, { x: 10, y: 3, z: 0 }), null);
+  const bike = { previousX: -10, previousY: 0, previousZ: 0, x: 10, y: 0, z: 0, speed: 20 };
+  world.collideBike(bike);
+  assert.equal(bike.crashed, true);
+  assert.ok(bike.x < 0);
+});
+test('rotated buildings and poles constrain the camera as well as the bike', () => {
+  const w = new ObstacleWorld();
+  w.add({ type: 'building', x: 0, z: 0, bottom: 0, top: 3, halfX: 2, halfZ: 0.2, yaw: Math.PI / 4 });
+  assert.ok(w.cameraFraction({ x: -5, y: 1, z: 0 }, { x: 5, y: 1, z: 0 }) < 0.5);
+  assert.equal(w.cameraFraction({ x: -5, y: 5, z: 0 }, { x: 5, y: 5, z: 0 }), 1);
+  w.add({ type: 'pole', x: 8, z: 0, bottom: 0, top: 3, radius: 0.045 });
+  assert.equal(w.sweep({ x: 7, y: 0, z: 0 }, { x: 9, y: 0, z: 0 }).object.type, 'pole');
+});
+test('loose ground reduces braking and simultaneous cornering grip', () => {
+  function run(grip, brake = 1) {
+    const b = new BikePhysics(
+      { ...flat, surfaceAt: () => ({ name: 'test', grip, resistance: 0.09 }) },
+      trail
+    );
+    b.speed = 15;
+    for (let i = 0; i < 60; i++) b.step(1 / 120, { steer: 1, brake });
+    return b;
+  }
+  const good = run(1),
+    loose = run(0.5),
+    corner = run(1, 0);
+  assert.ok(loose.speed > good.speed + 1);
+  assert.ok(Math.abs(good.travelYaw) < Math.abs(corner.travelYaw));
+  assert.ok(loose.rearSlip > good.rearSlip);
+});
+test('ghost interpolation wraps angles and compares time at equal route progress', () => {
+  const a = [0, 0, 0, 0, 3.1, 0, 0, 0, 6.2, 0, 0.02, 0.02],
+    b = [10, 20, 4, 8, -3.1, 0.2, 0.2, 1, 0.1, 1, 0.08, 0.06],
+    r = new ReplayTrack([a, b]);
+  const p = r.sample(5);
+  assert.equal(p[1], 10);
+  assert.ok(Math.abs(p[4] - Math.PI) < 0.01);
+  assert.ok(p[8] > 6.2 && p[8] < 6.4);
+  assert.equal(r.timeAtProgress(0.25), 2.5);
+  assert.equal(r.sample(11), null);
+  assert.equal(r.timeAtProgress(2), null);
+});
+test('all three minimaps fit route bounds and lookahead follows distance', () => {
+  for (const file of [
+    'public/assets/trail.json',
+    'public/assets/lenzerheide/trail.json',
+    'public/assets/lenzerheide/trail-technical.json',
+  ]) {
+    const points = JSON.parse(fs.readFileSync(file)).points,
+      map = minimapTransform(points);
+    for (const p of points) for (const v of map(p)) assert.ok(v >= 23.99 && v <= 216.01);
+  }
+  assert.deepEqual(routeLookAhead(trail.points, 0, 25), trail.points[2]);
+});
+test('two-bone IK preserves lengths even for unreachable targets', () => {
+  for (const t of [new THREE.Vector3(0.3, -0.5, 0.2), new THREE.Vector3(10, 0, 0), new THREE.Vector3()]) {
+    const start = new THREE.Vector3(),
+      r = solveLimb(start, t, new THREE.Vector3(0, 0, 1), 0.4, 0.5);
+    assert.ok(Math.abs(r.joint.distanceTo(start) - 0.4) < 1e-6);
+    assert.ok(Math.abs(r.joint.distanceTo(r.end) - 0.5) < 1e-6);
+  }
+});
+test('shipped rider has weighted skin and animated hands remain at the grips', async () => {
+  const bytes = fs.readFileSync('public/assets/rider-v4.glb'),
+    loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder),
+    g = await loader.parseAsync(
+      bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength),
+      ''
+    );
+  const player = new THREE.Group();
+  player.add(g.scene);
+  let skins = 0;
+  g.scene.traverse(o => {
+    if (o.isSkinnedMesh) {
+      skins++;
+      assert.ok(o.geometry.getAttribute('skinWeight'));
+      assert.ok(o.skeleton.bones.length >= 16);
+    }
+  });
+  assert.ok(skins > 0);
+  const rig = new RiderAnimator(player, g.scene);
+  const initial = rig.point('FootL').clone();
+  for (let i = 0; i < 120; i++)
+    rig.update(
+      { weight: Math.sin(i * 0.03), speed: 8, lean: 0.3, steer: 0.5, jumpCharge: 0, brakePressure: 0 },
+      1 / 60,
+      1
+    );
+  assert.ok(rig.point('FootL').distanceTo(initial) > 0.1);
+  assert.ok(rig.point('HandL').distanceTo(new THREE.Vector3(-0.35, 1.18, -0.59)) < 0.08);
+  for (const bone of Object.values(rig.bones)) assert.ok(bone.matrixWorld.elements.every(Number.isFinite));
+});
+test('camera stays in front of an obstructing wall and above the ground', () => {
+  const w = new ObstacleWorld();
+  w.add({ type: 'building', x: 0, z: 3, bottom: 0, top: 5, halfX: 10, halfZ: 0.3 });
+  const b = new BikePhysics(flat, trail),
+    c = new THREE.PerspectiveCamera(),
+    follow = new RideCamera();
+  follow.update(c, b, trail, 0, flat, w, 1 / 60, false, true);
+  assert.ok(c.position.z < 2.4);
+  assert.ok(c.position.y > 0.32);
+  assert.ok(c.position.toArray().every(Number.isFinite));
+});
